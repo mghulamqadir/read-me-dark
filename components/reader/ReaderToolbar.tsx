@@ -1,17 +1,27 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { PdfSearchResult } from "@/hooks/usePdfSearch";
 import { MAX_ZOOM, MIN_ZOOM, themes, ZOOM_STEP } from "@/lib/reader";
 import type { ReaderLayoutMode, ReaderPreferences, ReaderTheme } from "@/types/reader";
 import { BookmarkIcon, SearchIcon } from "./ReaderIcons";
 
-type ToolbarMenu = "typography" | "theme" | "width" | "zoom" | null;
+type ToolbarMenu = "typography" | "theme" | "width" | "search" | "zoom" | null;
 
 type ReaderToolbarProps = {
   preferences: ReaderPreferences;
   zoom: number;
   markerActive: boolean;
   hasMarker: boolean;
+  searchQuery: string;
+  searchResults: PdfSearchResult[];
+  searchResultCount: number;
+  searchCurrentIndex: number;
+  searchCurrentPage: number | null;
+  searchIsRunning: boolean;
+  searchScannedPages: number;
+  searchTotalPages: number;
+  searchError: string | null;
   onPreferencesChange: (update: Partial<ReaderPreferences>) => void;
   onZoom: (delta: number) => void;
   onZoomChange: (zoom: number) => void;
@@ -20,7 +30,14 @@ type ReaderToolbarProps = {
   onActualSize: () => void;
   onToggleSidebar: () => void;
   onToggleMarker: () => void;
+  onSearch: (query: string) => void | Promise<void>;
+  onNextSearchResult: () => void;
+  onPreviousSearchResult: () => void;
+  onSelectSearchResultIndex: (index: number) => void;
+  onClearSearch: () => void;
+  onFocusSearch: () => void;
 };
+
 
 export function ReaderToolbar(props: ReaderToolbarProps) {
   const [openMenu, setOpenMenu] = useState<ToolbarMenu>(null);
@@ -42,7 +59,20 @@ export function ReaderToolbar(props: ReaderToolbarProps) {
     return () => { document.removeEventListener("keydown", onKeyDown); document.removeEventListener("pointerdown", onPointerDown); };
   });
 
-  const toggleMenu = (menu: Exclude<ToolbarMenu, null>) => setOpenMenu((current) => current === menu ? null : menu);
+  useEffect(() => {
+    const onFindShortcut = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        props.onFocusSearch();
+      }
+    };
+    window.addEventListener("keydown", onFindShortcut);
+    return () => window.removeEventListener("keydown", onFindShortcut);
+  }, [props]);
+
+  const toggleMenu = (menu: Exclude<ToolbarMenu, null>) => {
+    setOpenMenu((current) => current === menu ? null : menu);
+  };
   const setLayout = (mode: ReaderLayoutMode) => { if (mode === "fit-width") props.onFitWidth(); else props.onActualSize(); closeMenu(); };
   const setTheme = (theme: ReaderTheme) => props.onPreferencesChange({ theme });
 
@@ -62,8 +92,9 @@ export function ReaderToolbar(props: ReaderToolbarProps) {
         <button ref={(element) => { if (element) triggerRefs.current.width = element; }} className={`toolbar-text-btn${openMenu === "width" ? " active" : ""}`} type="button" onClick={() => toggleMenu("width")} aria-expanded={openMenu === "width"} aria-haspopup="menu" title="Page width">Width</button>
         {openMenu === "width" && <div className="toolbar-popover width-popover" role="menu"><button type="button" role="menuitemradio" aria-checked={props.preferences.layoutMode === "fit-width"} onClick={() => setLayout("fit-width")}>Fit width</button><button type="button" role="menuitemradio" aria-checked={props.preferences.layoutMode === "actual-size"} onClick={() => setLayout("actual-size")}>Actual size</button></div>}
       </div>
+      <button className={`tool-btn${props.searchQuery ? " active" : ""}`} type="button" onClick={props.onFocusSearch} aria-label="Search document in sidebar" title="Search document in sidebar"><SearchIcon /></button>
       <div className="toolbar-menu-wrap">
-        <button ref={(element) => { if (element) triggerRefs.current.zoom = element; }} className={`tool-btn${openMenu === "zoom" ? " active" : ""}`} type="button" onClick={() => toggleMenu("zoom")} aria-label="Zoom controls" aria-expanded={openMenu === "zoom"} aria-haspopup="dialog" title="Zoom"><SearchIcon /></button>
+        <button ref={(element) => { if (element) triggerRefs.current.zoom = element; }} className={`toolbar-text-btn${openMenu === "zoom" ? " active" : ""}`} type="button" onClick={() => toggleMenu("zoom")} aria-expanded={openMenu === "zoom"} aria-haspopup="dialog" title="Zoom controls">Zoom</button>
         {openMenu === "zoom" && <div className="toolbar-popover zoom-popover" role="dialog" aria-label="Zoom controls"><button type="button" onClick={() => props.onZoom(-ZOOM_STEP)} disabled={props.zoom <= MIN_ZOOM} aria-label="Zoom out">−</button><input type="range" min={MIN_ZOOM} max={MAX_ZOOM} step={ZOOM_STEP} value={props.zoom} onChange={(event) => props.onZoomChange(Number(event.target.value))} aria-label="Zoom level" /><button type="button" onClick={() => props.onZoom(ZOOM_STEP)} disabled={props.zoom >= MAX_ZOOM} aria-label="Zoom in">+</button><button type="button" className="zoom-reset" onClick={props.onResetZoom}>Reset</button></div>}
       </div>
       <button className={`tool-btn bookmark-btn${props.markerActive ? " active" : ""}`} type="button" onClick={props.onToggleMarker} aria-label={props.markerActive ? "Remove marker from this page" : props.hasMarker ? "Replace saved marker with this page" : "Save this page as marker"} aria-pressed={props.markerActive} title={props.markerActive ? "Remove marker" : "Save marker"}><BookmarkIcon filled={props.markerActive} /></button>

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { clamp, documentFallbackId, getPageColors, MAX_CONCURRENT_RENDERS, MAX_ZOOM, MIN_ZOOM, OVERSCAN, PAGE_GAP, ZOOM_STEP } from "@/lib/reader";
 import type { ReaderMarker, ReaderPosition, ReaderProgress } from "@/types/reader";
 import { usePageRenderGate } from "./usePageRenderGate";
+import { usePdfSearch } from "./usePdfSearch";
 import { useReaderPreferences } from "./useReaderPreferences";
 import { useReadingProgress } from "./useReadingProgress";
 
@@ -15,6 +16,7 @@ export function usePdfReader() {
   const { preferences, updatePreferences } = useReaderPreferences();
   const { recentDocuments, saveProgress } = useReadingProgress();
   const [file, setFile] = useState<File | null>(null);
+  const [pdfProxy, setPdfProxy] = useState<PDFDocumentProxy | null>(null);
   const [documentId, setDocumentId] = useState<string | null>(null);
   const [numPages, setNumPages] = useState(0);
   const [activePage, setActivePage] = useState(1);
@@ -32,6 +34,8 @@ export function usePdfReader() {
   const horizontalAnchorRef = useRef<number | null>(null);
   const zoomPositionRef = useRef<ReaderPosition | null>(null);
   const gate = usePageRenderGate(MAX_CONCURRENT_RENDERS);
+  const pdfSearch = usePdfSearch(pdfProxy, sessionId);
+  const { clearSearch: clearPdfSearch, nextResult: selectNextSearchResult, previousResult: selectPreviousSearchResult, runSearch: searchPdf, selectResultIndex: selectPdfSearchResultIndex } = pdfSearch;
   const pageColors = useMemo(() => getPageColors(preferences.theme), [preferences.theme]);
   const actualSizeBaseWidth = viewerWidth <= 640 ? viewerWidth : ACTUAL_PAGE_WIDTH;
   const pageWidth = preferences.layoutMode === "fit-width" ? viewerWidth : Math.round(actualSizeBaseWidth * zoom);
@@ -109,22 +113,50 @@ export function usePdfReader() {
   const loadFile = useCallback((nextFile: File | undefined) => {
     if (!nextFile || nextFile.size === 0) { setError("Please select a non-empty PDF file."); return; }
     if (nextFile.type !== "application/pdf" && !nextFile.name.toLowerCase().endsWith(".pdf")) { setError("Please select a PDF file."); return; }
-    flushProgress(); gate.reset(); positionRef.current = { page: 1, offsetRatio: 0 };
-    setError(null); setFile(nextFile); setDocumentId(null); setNumPages(0); setActivePage(1); setPageInput("1"); setMarker(null); setZoom(preferences.zoom); setAspectRatio(1.414); setSessionId((current) => current + 1);
-  }, [flushProgress, gate, preferences.zoom]);
+    flushProgress(); gate.reset(); clearPdfSearch(); positionRef.current = { page: 1, offsetRatio: 0 };
+    setError(null); setFile(nextFile); setPdfProxy(null); setDocumentId(null); setNumPages(0); setActivePage(1); setPageInput("1"); setMarker(null); setZoom(preferences.zoom); setAspectRatio(1.414); setSessionId((current) => current + 1);
+  }, [clearPdfSearch, flushProgress, gate, preferences.zoom]);
 
   const clearFileAfterError = useCallback((message: string) => {
-    gate.reset(); setFile(null); setDocumentId(null); setNumPages(0); setMarker(null); setError(message); setSessionId((current) => current + 1);
-  }, [gate]);
+    gate.reset(); clearPdfSearch(); setFile(null); setPdfProxy(null); setDocumentId(null); setNumPages(0); setMarker(null); setError(message); setSessionId((current) => current + 1);
+  }, [clearPdfSearch, gate]);
 
-  const jumpToPosition = useCallback((position: ReaderPosition, behavior: ScrollBehavior = "auto") => {
+  const jumpToPosition = useCallback((position: ReaderPosition, behavior: ScrollBehavior = "auto", align: "start" | "center" = "start") => {
     const page = clamp(position.page, 1, numPages || position.page || 1);
     const offsetRatio = clamp(position.offsetRatio, 0, 1);
     setActivePage(page); setPageInput(String(page)); positionRef.current = { page, offsetRatio };
-    virtualizer.scrollToIndex(page - 1, { align: "start", behavior });
+    virtualizer.scrollToIndex(page - 1, { align, behavior });
     window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+      const container = scrollRef.current;
       const item = virtualizer.getVirtualItems().find((virtualItem) => virtualItem.index === page - 1);
-      if (item && scrollRef.current) scrollRef.current.scrollTop = item.start + Math.max(0, item.size - PAGE_GAP) * offsetRatio;
+      if (item && container) {
+        if (align === "center") {
+          const containerHeight = container.clientHeight;
+          const pageHeight = Math.max(0, item.size - PAGE_GAP);
+          const matchVerticalOffset = pageHeight * offsetRatio;
+          const targetScrollTop = item.start + matchVerticalOffset - (containerHeight / 2);
+          container.scrollTop = Math.max(0, targetScrollTop);
+        } else {
+          container.scrollTop = item.start + Math.max(0, item.size - PAGE_GAP) * offsetRatio;
+        }
+
+        const tryScrollHighlight = () => {
+          const pageEl = container.querySelector(`[data-page="${page}"]`);
+          const highlightEl = pageEl?.querySelector(".pdf-search-highlight");
+          if (highlightEl) {
+            const containerRect = container.getBoundingClientRect();
+            const highlightRect = highlightEl.getBoundingClientRect();
+            const relativeTop = highlightRect.top - containerRect.top;
+            const targetScrollTop = container.scrollTop + relativeTop - (containerRect.height / 2) + (highlightRect.height / 2);
+            container.scrollTo({ top: Math.max(0, targetScrollTop), behavior: "smooth" });
+          }
+        };
+
+        tryScrollHighlight();
+        window.setTimeout(tryScrollHighlight, 100);
+        window.setTimeout(tryScrollHighlight, 250);
+        window.setTimeout(tryScrollHighlight, 450);
+      }
     }));
   }, [numPages, virtualizer]);
 
@@ -132,7 +164,7 @@ export function usePdfReader() {
     const identity = pdf.fingerprints?.[0] || (file ? documentFallbackId(file) : "unknown");
     const previous = recentDocuments.find((entry) => entry.id === identity);
     const restoredPosition = previous?.scrollPosition ?? { page: previous?.currentPage ?? 1, offsetRatio: 0 };
-    setDocumentId(identity); setNumPages(pdf.numPages); setMarker(previous?.marker ?? null);
+    setPdfProxy(pdf); setDocumentId(identity); setNumPages(pdf.numPages); setMarker(previous?.marker ?? null);
     if (previous) { setZoom(clamp(previous.zoom, MIN_ZOOM, MAX_ZOOM)); updatePreferences({ theme: previous.theme, fontSize: previous.fontSize, zoom: previous.zoom, layoutMode: "actual-size" }); }
     try { const firstPage = await pdf.getPage(1); const viewport = firstPage.getViewport({ scale: 1 }); setAspectRatio(viewport.height / viewport.width); } catch { /* Use the default document ratio. */ }
     window.requestAnimationFrame(() => jumpToPosition({ page: clamp(restoredPosition.page, 1, pdf.numPages), offsetRatio: restoredPosition.offsetRatio }));
@@ -165,6 +197,10 @@ export function usePdfReader() {
   const toggleMarker = useCallback(() => { const position = positionRef.current; setMarker((current) => current?.page === position.page ? null : { ...position, createdAt: Date.now() }); }, []);
   const jumpToMarker = useCallback(() => { if (marker) jumpToPosition(marker, "smooth"); }, [jumpToPosition, marker]);
   const clearMarker = useCallback(() => setMarker(null), []);
+  const runSearch = useCallback(async (query: string) => { const result = await searchPdf(query); if (result) jumpToPosition({ page: result.page, offsetRatio: result.offsetRatio ?? 0 }, "smooth", "center"); }, [jumpToPosition, searchPdf]);
+  const nextSearchResult = useCallback(() => { const result = selectNextSearchResult(); if (result) jumpToPosition({ page: result.page, offsetRatio: result.offsetRatio ?? 0 }, "smooth", "center"); }, [jumpToPosition, selectNextSearchResult]);
+  const previousSearchResult = useCallback(() => { const result = selectPreviousSearchResult(); if (result) jumpToPosition({ page: result.page, offsetRatio: result.offsetRatio ?? 0 }, "smooth", "center"); }, [jumpToPosition, selectPreviousSearchResult]);
+  const selectSearchResultIndex = useCallback((index: number) => { const result = selectPdfSearchResultIndex(index); if (result) jumpToPosition({ page: result.page, offsetRatio: result.offsetRatio ?? 0 }, "smooth", "center"); }, [jumpToPosition, selectPdfSearchResultIndex]);
 
-  return { file, sessionId, numPages, activePage, pageInput, zoom, preferences, error, pageColors, pageWidth, estimatedPageHeight, progressPercent, marker, markerIsActive, scrollRef, gate, virtualItems: virtualizer.getVirtualItems(), totalSize: virtualizer.getTotalSize(), measureElement: virtualizer.measureElement, recentDocuments, loadFile, onDocumentLoadSuccess, onDocumentLoadError: clearFileAfterError, scrollToPage, changeZoom, setZoomLevel, resetZoom, fitWidth, useActualSize, toggleMarker, jumpToMarker, clearMarker, updatePreferences, setPageInput, setInputFocused, commitPageInput };
+  return { file, sessionId, numPages, activePage, pageInput, zoom, preferences, error, pageColors, pageWidth, estimatedPageHeight, progressPercent, marker, markerIsActive, search: { query: pdfSearch.query, results: pdfSearch.results, currentIndex: pdfSearch.currentIndex, isSearching: pdfSearch.isSearching, scannedPages: pdfSearch.scannedPages, totalPages: pdfSearch.totalPages, error: pdfSearch.error, runSearch, nextResult: nextSearchResult, previousResult: previousSearchResult, selectResultIndex: selectSearchResultIndex, clearSearch: clearPdfSearch }, scrollRef, gate, virtualItems: virtualizer.getVirtualItems(), totalSize: virtualizer.getTotalSize(), measureElement: virtualizer.measureElement, recentDocuments, loadFile, onDocumentLoadSuccess, onDocumentLoadError: clearFileAfterError, scrollToPage, changeZoom, setZoomLevel, resetZoom, fitWidth, useActualSize, toggleMarker, jumpToMarker, clearMarker, updatePreferences, setPageInput, setInputFocused, commitPageInput };
 }
