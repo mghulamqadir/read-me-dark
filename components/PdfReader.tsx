@@ -99,23 +99,65 @@ const icons = {
    ═══════════════════════════════════════════════════════════ */
 function usePageRenderGate(max: number) {
   const activeRef = useRef<Set<number>>(new Set());
-  const [, bump] = useState(0);
+  const completedRef = useRef<Set<number>>(new Set());
+  const [version, bump] = useState(0);
 
-  const acquire = useCallback((page: number) => {
-    if (activeRef.current.has(page)) return true;
-    if (activeRef.current.size >= max) return false;
-    activeRef.current.add(page);
-    return true;
-  }, [max]);
+  const acquire = useCallback(
+    (page: number) => {
+      if (completedRef.current.has(page)) return true;
+      if (activeRef.current.has(page)) return true;
+      if (activeRef.current.size >= max) return false;
+      activeRef.current.add(page);
+      return true;
+    },
+    [max]
+  );
 
-  const release = useCallback((page: number) => {
+  const onComplete = useCallback((page: number) => {
+    let changed = false;
     if (activeRef.current.delete(page)) {
-      // Wake up any pages waiting for a slot.
-      bump(x => x + 1);
+      changed = true;
+    }
+    if (!completedRef.current.has(page)) {
+      completedRef.current.add(page);
+      changed = true;
+    }
+    if (changed) {
+      bump((x) => x + 1);
     }
   }, []);
 
-  return { acquire, release };
+  const onError = useCallback((page: number) => {
+    if (activeRef.current.delete(page)) {
+      bump((x) => x + 1);
+    }
+  }, []);
+
+  const release = useCallback((page: number) => {
+    let changed = false;
+    if (activeRef.current.delete(page)) {
+      changed = true;
+    }
+    if (completedRef.current.delete(page)) {
+      changed = true;
+    }
+    if (changed) {
+      bump((x) => x + 1);
+    }
+  }, []);
+
+  const reset = useCallback(() => {
+    activeRef.current.clear();
+    completedRef.current.clear();
+    bump((x) => x + 1);
+  }, []);
+
+  const api = useMemo(
+    () => ({ acquire, onComplete, onError, release, reset }),
+    [acquire, onComplete, onError, release, reset]
+  );
+
+  return { api, version };
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -126,7 +168,8 @@ type VirtualPageProps = {
   pageWidth: number;
   estimatedHeight: number;
   pageColors: { background: string; foreground: string } | undefined;
-  gate: ReturnType<typeof usePageRenderGate>;
+  gate: ReturnType<typeof usePageRenderGate>["api"];
+  renderVersion: number;
   measureRef: (el: HTMLDivElement | null) => void;
 };
 
@@ -136,12 +179,12 @@ const VirtualPage = memo(function VirtualPage({
   estimatedHeight,
   pageColors,
   gate,
+  renderVersion,
   measureRef,
 }: VirtualPageProps) {
   const canRender = gate.acquire(pageNumber);
 
   // Release the render slot if this page unmounts (scrolled away)
-  // before it ever finished rendering.
   useEffect(() => {
     return () => gate.release(pageNumber);
   }, [pageNumber, gate]);
@@ -149,6 +192,8 @@ const VirtualPage = memo(function VirtualPage({
   return (
     <div
       data-page={pageNumber}
+      data-index={pageNumber - 1}
+      data-render-version={renderVersion}
       ref={measureRef}
       className="pdf-page-shell"
       style={{ width: `${pageWidth}px` }}
@@ -160,8 +205,8 @@ const VirtualPage = memo(function VirtualPage({
           pageColors={pageColors}
           renderTextLayer
           renderAnnotationLayer
-          onRenderSuccess={() => gate.release(pageNumber)}
-          onRenderError={() => gate.release(pageNumber)}
+          onRenderSuccess={() => gate.onComplete(pageNumber)}
+          onRenderError={() => gate.onError(pageNumber)}
           loading={
             <div className="page-placeholder" style={{ height: `${estimatedHeight}px` }}>
               <div className="spinner" />
@@ -204,7 +249,7 @@ export default function PdfReader() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef     = useRef<HTMLDivElement>(null);
   const readerRef      = useRef<HTMLElement>(null);
-  const gate = usePageRenderGate(MAX_CONCURRENT_RENDERS);
+  const { api: gate, version: renderVersion } = usePageRenderGate(MAX_CONCURRENT_RENDERS);
 
   /* ── Derived ─────────────────────────────────────────────── */
   const pageColors = useMemo(() => {
@@ -222,6 +267,9 @@ export default function PdfReader() {
     getScrollElement: () => scrollRef.current,
     estimateSize: () => estimatedPageHeight + PAGE_GAP,
     overscan: OVERSCAN,
+    // Measuring a newly mounted page occurs during React's commit phase.
+    // Avoid TanStack Virtual's synchronous flush from that lifecycle path.
+    useFlushSync: false,
     // fixes rounding jitter between estimated & measured sizes
     measureElement: (el) => el.getBoundingClientRect().height + PAGE_GAP,
   });
@@ -274,6 +322,7 @@ export default function PdfReader() {
       setError("Please choose a PDF file.");
       return;
     }
+    gate.reset();
     setError(null);
     setFile(f);
     setPdfProxy(null);
@@ -282,7 +331,7 @@ export default function PdfReader() {
     setPageInput("1");
     setZoom(1);
     setAspectRatio(1.414);
-  }, []);
+  }, [gate]);
 
   function onFileChange(e: ChangeEvent<HTMLInputElement>) {
     loadFile(e.target.files?.[0]);
@@ -646,6 +695,7 @@ export default function PdfReader() {
                             estimatedHeight={estimatedPageHeight}
                             pageColors={pageColors}
                             gate={gate}
+                            renderVersion={renderVersion}
                             measureRef={rowVirtualizer.measureElement}
                           />
                         </div>
