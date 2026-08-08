@@ -1,44 +1,55 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef } from "react";
 
-export type PageRenderGate = ReturnType<typeof usePageRenderGate>["api"];
+type Grant = () => void;
 
-export function usePageRenderGate(maxConcurrentRenders: number) {
-  const activePages = useRef(new Set<number>());
-  const completedPages = useRef(new Set<number>());
-  const [version, bumpVersion] = useState(0);
+export type PageRenderGate = {
+  request: (key: string, grant: Grant) => void;
+  complete: (key: string) => void;
+  release: (key: string) => void;
+  reset: () => void;
+};
 
-  const acquire = useCallback((page: number) => {
-    if (completedPages.current.has(page) || activePages.current.has(page)) return true;
-    if (activePages.current.size >= maxConcurrentRenders) return false;
+export function usePageRenderGate(maxConcurrentRenders: number): PageRenderGate {
+  const active = useRef(new Set<string>());
+  const queued = useRef(new Map<string, Grant>());
 
-    activePages.current.add(page);
-    return true;
+  const grantNext = useCallback(() => {
+    while (active.current.size < maxConcurrentRenders) {
+      const next = queued.current.entries().next();
+      if (next.done) return;
+      const [key, grant] = next.value;
+      queued.current.delete(key);
+      active.current.add(key);
+      grant();
+    }
   }, [maxConcurrentRenders]);
 
-  const onComplete = useCallback((page: number) => {
-    const changed = activePages.current.delete(page) || !completedPages.current.has(page);
-    completedPages.current.add(page);
-    if (changed) bumpVersion((current) => current + 1);
-  }, []);
+  const request = useCallback((key: string, grant: Grant) => {
+    if (active.current.has(key)) return;
+    if (active.current.size < maxConcurrentRenders) {
+      active.current.add(key);
+      grant();
+      return;
+    }
+    queued.current.set(key, grant);
+  }, [maxConcurrentRenders]);
 
-  const onError = useCallback((page: number) => {
-    if (activePages.current.delete(page)) bumpVersion((current) => current + 1);
-  }, []);
+  const complete = useCallback((key: string) => {
+    if (active.current.delete(key)) grantNext();
+  }, [grantNext]);
 
-  const release = useCallback((page: number) => {
-    const changed = activePages.current.delete(page) || completedPages.current.delete(page);
-    if (changed) bumpVersion((current) => current + 1);
-  }, []);
+  const release = useCallback((key: string) => {
+    const wasActive = active.current.delete(key);
+    queued.current.delete(key);
+    if (wasActive) grantNext();
+  }, [grantNext]);
 
   const reset = useCallback(() => {
-    activePages.current.clear();
-    completedPages.current.clear();
-    bumpVersion((current) => current + 1);
+    active.current.clear();
+    queued.current.clear();
   }, []);
 
-  const api = useMemo(() => ({ acquire, onComplete, onError, release, reset }), [acquire, onComplete, onError, release, reset]);
-
-  return { api, version };
+  return useMemo(() => ({ request, complete, release, reset }), [request, complete, release, reset]);
 }

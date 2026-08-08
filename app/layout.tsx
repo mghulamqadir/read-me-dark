@@ -4,8 +4,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "NightReader",
-  description: "A local PDF book reader with light, dark, and sepia themes.",
+  title: "Read Me Dark - Distraction-Free PDF Reader",
+  description: "Read PDFs in a clean, customizable dark reading experience.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
