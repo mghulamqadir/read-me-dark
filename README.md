@@ -1,17 +1,19 @@
-# NightReader — Next.js PDF Dark Mode Reader
+# NightReader - Next.js PDF Dark Mode Reader
 
-A small Next.js App Router project for opening local PDF books and reading them in Light, Dark, or Sepia mode.
+A local-first Next.js PDF reader with continuous scrolling, virtualized pages, and Light, Dark, and Sepia reading modes.
 
 ## Features
 
 - Local PDF upload and drag/drop
 - Light, Dark, and Sepia reader themes
 - Theme saved in `localStorage`
-- Previous/next page controls
-- Keyboard page navigation with Left/Right arrows
-- Zoom controls
+- Continuous scrolling with virtualized pages for large books
+- Page-number jumps, previous/next controls, and Left/Right keyboard navigation
+- Zoom controls, including Ctrl + scroll / trackpad pinch
+- Fullscreen reading
 - Responsive layout
 - PDF.js rendered through `react-pdf`
+- PDF.js `pageColors` for Dark and Sepia modes, preserving original embedded-image pixels
 - No upload API: selected PDFs remain in the browser
 
 ## Run locally
@@ -30,15 +32,23 @@ npm run build
 npm start
 ```
 
-## How PDF dark mode works
+## How Dark Mode Works
 
-PDF pages are rendered to canvas by PDF.js. The starter applies a visual filter to the rendered canvas for Dark and Sepia themes. This works especially well for text-heavy PDFs.
+Dark and Sepia modes are passed to PDF.js through `react-pdf`'s `pageColors` option. PDF.js uses those colors during rendering rather than applying a CSS canvas filter after rendering.
 
-Because a PDF canvas can contain text, photos, illustrations, and backgrounds in the same bitmap, a simple visual filter also changes embedded images. If you need image-preserving dark mode for arbitrary PDFs, the next step is a content-aware PDF rendering pipeline that treats text/vector content and raster images separately.
+This avoids color-inverting or degrading embedded raster images. A PDF whose page is entirely a scanned image cannot gain a true dark background without altering that source image; in that case the reader preserves the original pixels.
+
+## Performance
+
+Only the pages around the current scroll position are mounted. PDF rendering is limited to a small concurrent queue so jumping to a distant page progressively renders the target page and its neighbors without attempting to paint the whole document.
+
+## Generated Files
+
+`tsconfig.tsbuildinfo` is TypeScript's incremental-build cache. It is generated locally because `incremental` is enabled in `tsconfig.json`; it is not required to run, build, or deploy the app and is ignored by Git.
 
 ## Main files
 
 - `app/page.tsx` — loads the PDF reader client-side
-- `components/PdfReader.tsx` — upload, PDF.js worker, navigation, theme state
+- `components/PdfReader.tsx` — upload, PDF.js worker, virtual scrolling, navigation, rendering queue, theme state
 - `app/globals.css` — application and reader themes
 - `types/reader.ts` — theme type
