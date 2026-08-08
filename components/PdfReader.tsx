@@ -4,6 +4,7 @@
 import {
   ChangeEvent,
   DragEvent,
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -12,6 +13,7 @@ import {
 } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import type { PDFDocumentProxy } from "pdfjs-dist";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import type { ReaderTheme } from "@/types/reader";
 import "react-pdf/dist/Page/TextLayer.css";
 import "react-pdf/dist/Page/AnnotationLayer.css";
@@ -26,6 +28,9 @@ const THEME_KEY = "nightreader-theme";
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 3;
 const ZOOM_STEP = 0.1;
+const PAGE_GAP = 24;
+const OVERSCAN = 2;
+const MAX_CONCURRENT_RENDERS = 3;
 
 const themes: { value: ReaderTheme; label: string; icon: string }[] = [
   { value: "dark", label: "Dark", icon: "☾" },
@@ -86,39 +91,77 @@ const icons = {
   ),
 };
 
-/* ── Individual Page Item Wrapper Component for Virtualization & Intersection Tracking ── */
-function BookPage({
-  pageNumber,
-  pageWidth,
-  pageColors,
-  theme,
-  isRendered,
-  setPageRef,
-}: {
+/* ═══════════════════════════════════════════════════════════
+   Render concurrency gate
+   Caps how many <Page> canvases render at once, independent
+   of how many are mounted (mount count is controlled by the
+   virtualizer's overscan; this controls actual CPU work).
+   ═══════════════════════════════════════════════════════════ */
+function usePageRenderGate(max: number) {
+  const activeRef = useRef<Set<number>>(new Set());
+  const [, bump] = useState(0);
+
+  const acquire = useCallback((page: number) => {
+    if (activeRef.current.has(page)) return true;
+    if (activeRef.current.size >= max) return false;
+    activeRef.current.add(page);
+    return true;
+  }, [max]);
+
+  const release = useCallback((page: number) => {
+    if (activeRef.current.delete(page)) {
+      // Wake up any pages waiting for a slot.
+      bump(x => x + 1);
+    }
+  }, []);
+
+  return { acquire, release };
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Virtualized page item
+   ═══════════════════════════════════════════════════════════ */
+type VirtualPageProps = {
   pageNumber: number;
   pageWidth: number;
+  estimatedHeight: number;
   pageColors: { background: string; foreground: string } | undefined;
-  theme: ReaderTheme;
-  isRendered: boolean;
-  setPageRef: (el: HTMLDivElement | null) => void;
-}) {
-  const estimatedHeight = Math.round(pageWidth * 1.414);
+  gate: ReturnType<typeof usePageRenderGate>;
+  measureRef: (el: HTMLDivElement | null) => void;
+};
+
+const VirtualPage = memo(function VirtualPage({
+  pageNumber,
+  pageWidth,
+  estimatedHeight,
+  pageColors,
+  gate,
+  measureRef,
+}: VirtualPageProps) {
+  const canRender = gate.acquire(pageNumber);
+
+  // Release the render slot if this page unmounts (scrolled away)
+  // before it ever finished rendering.
+  useEffect(() => {
+    return () => gate.release(pageNumber);
+  }, [pageNumber, gate]);
 
   return (
     <div
-      id={`page-${pageNumber}`}
       data-page={pageNumber}
-      ref={setPageRef}
-      className={`pdf-page-shell theme-${theme}`}
-      style={{ minHeight: isRendered ? undefined : `${estimatedHeight}px`, width: `${pageWidth}px` }}
+      ref={measureRef}
+      className="pdf-page-shell"
+      style={{ width: `${pageWidth}px` }}
     >
-      {isRendered ? (
+      {canRender ? (
         <Page
           pageNumber={pageNumber}
           width={pageWidth}
           pageColors={pageColors}
           renderTextLayer
           renderAnnotationLayer
+          onRenderSuccess={() => gate.release(pageNumber)}
+          onRenderError={() => gate.release(pageNumber)}
           loading={
             <div className="page-placeholder" style={{ height: `${estimatedHeight}px` }}>
               <div className="spinner" />
@@ -132,33 +175,36 @@ function BookPage({
       )}
     </div>
   );
-}
+});
 
 /* ═══════════════════════════════════════════════════════════
    Main PdfReader Component
    ═══════════════════════════════════════════════════════════ */
 export default function PdfReader() {
   /* ── State ───────────────────────────────────────────────── */
-  const [file, setFile]                 = useState<File | null>(null);
-  const [numPages, setNumPages]         = useState(0);
-  const [activePage, setActivePage]     = useState(1);
-  const [zoom, setZoom]                 = useState(1);
-  const [isFullscreen, setIsFullscreen]   = useState(false);
-  const [renderedRange, setRenderedRange] = useState<[number, number]>([1, 5]);
-  const [theme, setTheme]               = useState<ReaderTheme>(() => {
+  const [file, setFile]             = useState<File | null>(null);
+  const [pdfProxy, setPdfProxy]     = useState<PDFDocumentProxy | null>(null);
+  const [numPages, setNumPages]     = useState(0);
+  const [activePage, setActivePage] = useState(1);
+  const [pageInput, setPageInput]   = useState("1");
+  const [inputFocused, setInputFocused] = useState(false);
+  const [zoom, setZoom]             = useState(1);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [aspectRatio, setAspectRatio]   = useState(1.414); // height / width, refined after load
+  const [theme, setTheme] = useState<ReaderTheme>(() => {
     if (typeof window === "undefined") return "dark";
     const s = window.localStorage.getItem(THEME_KEY) as ReaderTheme | null;
     return s && ["light", "dark", "sepia"].includes(s) ? s : "dark";
   });
-  const [dragging, setDragging]         = useState(false);
-  const [error, setError]               = useState<string | null>(null);
-  const [viewerWidth, setViewerWidth]   = useState(900);
+  const [dragging, setDragging] = useState(false);
+  const [error, setError]       = useState<string | null>(null);
+  const [viewerWidth, setViewerWidth] = useState(900);
 
   /* ── Refs ────────────────────────────────────────────────── */
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const scrollRef    = useRef<HTMLDivElement>(null);
-  const readerRef    = useRef<HTMLElement>(null);
-  const pageRefs     = useRef<Map<number, HTMLDivElement>>(new Map());
+  const scrollRef     = useRef<HTMLDivElement>(null);
+  const readerRef      = useRef<HTMLElement>(null);
+  const gate = usePageRenderGate(MAX_CONCURRENT_RENDERS);
 
   /* ── Derived ─────────────────────────────────────────────── */
   const pageColors = useMemo(() => {
@@ -168,6 +214,23 @@ export default function PdfReader() {
   }, [theme]);
 
   const pageWidth = Math.round(viewerWidth * zoom);
+  const estimatedPageHeight = Math.round(pageWidth * aspectRatio);
+
+  /* ── Virtualizer ─────────────────────────────────────────── */
+  const rowVirtualizer = useVirtualizer({
+    count: numPages,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => estimatedPageHeight + PAGE_GAP,
+    overscan: OVERSCAN,
+    // fixes rounding jitter between estimated & measured sizes
+    measureElement: (el) => el.getBoundingClientRect().height + PAGE_GAP,
+  });
+
+  // Re-baseline size estimates when width/zoom/aspect ratio changes
+  // (previous DOM measurements are now stale).
+  useEffect(() => {
+    rowVirtualizer.measure();
+  }, [pageWidth, aspectRatio]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Persist theme ───────────────────────────────────────── */
   useEffect(() => {
@@ -213,10 +276,12 @@ export default function PdfReader() {
     }
     setError(null);
     setFile(f);
+    setPdfProxy(null);
     setNumPages(0);
     setActivePage(1);
-    setRenderedRange([1, 5]);
+    setPageInput("1");
     setZoom(1);
+    setAspectRatio(1.414);
   }, []);
 
   function onFileChange(e: ChangeEvent<HTMLInputElement>) {
@@ -230,102 +295,73 @@ export default function PdfReader() {
     loadFile(e.dataTransfer.files?.[0]);
   }
 
-  function onDocumentLoadSuccess(pdf: PDFDocumentProxy) {
+  async function onDocumentLoadSuccess(pdf: PDFDocumentProxy) {
+    setPdfProxy(pdf);
     setNumPages(pdf.numPages);
     setActivePage(1);
-    setRenderedRange([1, Math.min(5, pdf.numPages)]);
+    setPageInput("1");
     setError(null);
+
+    // Seed an accurate size estimate from page 1's real aspect ratio
+    // (metadata-only call — does not render anything).
+    try {
+      const page1 = await pdf.getPage(1);
+      const viewport = page1.getViewport({ scale: 1 });
+      setAspectRatio(viewport.height / viewport.width);
+    } catch {
+      // fall back to the A4-ish default already in state
+    }
   }
 
-  /* ── Page Jump / Scroll to Page ─────────────────────────── */
+  /* ── Page Jump ───────────────────────────────────────────── */
   const scrollToPage = useCallback((targetPage: number) => {
     const clamped = clamp(targetPage, 1, numPages || 1);
     setActivePage(clamped);
-
-    // Expand render range so target page renders immediately
-    setRenderedRange(([start, end]) => [
-      Math.min(start, Math.max(1, clamped - 3)),
-      Math.max(end, Math.min(numPages, clamped + 3)),
-    ]);
-
-    requestAnimationFrame(() => {
-      const targetEl = pageRefs.current.get(clamped);
-      if (targetEl && scrollRef.current) {
-        targetEl.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
-    });
-  }, [numPages]);
+    setPageInput(String(clamped));
+    rowVirtualizer.scrollToIndex(clamped - 1, { align: "start", behavior: "smooth" });
+  }, [numPages, rowVirtualizer]);
 
   const changeZoom = useCallback((delta: number) => {
     setZoom(cur => clamp(Number((cur + delta).toFixed(2)), MIN_ZOOM, MAX_ZOOM));
   }, []);
 
-  /* ── IntersectionObserver: Track Visible Pages & Render Window ── */
+  /* ── Track active page from scroll position ─────────────── */
   useEffect(() => {
-    if (!numPages || !scrollRef.current) return;
+    const el = scrollRef.current;
+    if (!el || !numPages) return;
 
-    const visibleMap = new Map<number, number>(); // pageNum -> intersectionRatio
+    let raf = 0;
+    function onScroll() {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        const items = rowVirtualizer.getVirtualItems();
+        if (!items.length) return;
+        const offset = el!.scrollTop;
+        const current = items.find(it => it.start + it.size > offset + 4) ?? items[0];
+        const page = current.index + 1;
+        setActivePage(page);
+        if (!inputFocused) setPageInput(String(page));
+      });
+    }
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          const pageAttr = entry.target.getAttribute("data-page");
-          if (!pageAttr) return;
-          const p = parseInt(pageAttr, 10);
-          if (entry.isIntersecting) {
-            visibleMap.set(p, entry.intersectionRatio);
-          } else {
-            visibleMap.delete(p);
-          }
-        });
-
-        if (visibleMap.size > 0) {
-          // Find page with maximum intersection ratio or closest to top
-          let maxPage = activePage;
-          let maxRatio = -1;
-          const visiblePagesList: number[] = [];
-
-          visibleMap.forEach((ratio, page) => {
-            visiblePagesList.push(page);
-            if (ratio > maxRatio) {
-              maxRatio = ratio;
-              maxPage = page;
-            }
-          });
-
-          setActivePage(maxPage);
-
-          const minVis = Math.min(...visiblePagesList);
-          const maxVis = Math.max(...visiblePagesList);
-
-          // Buffer rendered range: 3 pages above and 3 pages below viewport
-          const bufferStart = Math.max(1, minVis - 3);
-          const bufferEnd   = Math.min(numPages, maxVis + 3);
-
-          setRenderedRange([bufferStart, bufferEnd]);
-        }
-      },
-      {
-        root: scrollRef.current,
-        rootMargin: "200px 0px 200px 0px",
-        threshold: [0, 0.2, 0.5, 0.8, 1.0],
-      }
-    );
-
-    pageRefs.current.forEach((el) => {
-      if (el) observer.observe(el);
-    });
-
-    return () => observer.disconnect();
-  }, [numPages]);
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [numPages, rowVirtualizer, inputFocused]);
 
   /* ── Keyboard shortcuts ──────────────────────────────────── */
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (!file) return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
+
       const ctrl = e.ctrlKey || e.metaKey;
-      if (e.key === "ArrowLeft")  scrollToPage(activePage - 1);
-      if (e.key === "ArrowRight") scrollToPage(activePage + 1);
+      if (e.key === "ArrowLeft")  { e.preventDefault(); scrollToPage(activePage - 1); }
+      if (e.key === "ArrowRight") { e.preventDefault(); scrollToPage(activePage + 1); }
       if (ctrl && e.key === "+") { e.preventDefault(); changeZoom(ZOOM_STEP); }
       if (ctrl && e.key === "-") { e.preventDefault(); changeZoom(-ZOOM_STEP); }
       if (ctrl && e.key === "0") { e.preventDefault(); setZoom(1); }
@@ -350,9 +386,23 @@ export default function PdfReader() {
     return () => el.removeEventListener("wheel", onWheel);
   }, [file, changeZoom]);
 
+  /* ── Page number input handlers ──────────────────────────── */
+  function commitPageInput() {
+    const v = parseInt(pageInput, 10);
+    if (!isNaN(v)) {
+      scrollToPage(v);
+    } else {
+      setPageInput(String(activePage));
+    }
+    setInputFocused(false);
+  }
+
   /* ═══════════════════════════════════════════════════════════
      Render
      ═══════════════════════════════════════════════════════════ */
+  const virtualItems = rowVirtualizer.getVirtualItems();
+  const totalSize = rowVirtualizer.getTotalSize();
+
   return (
     <main className="reader-app" data-theme={theme}>
       {/* ── Top bar ──────────────────────────────────────── */}
@@ -437,7 +487,7 @@ export default function PdfReader() {
           {error && <p className="error-banner">{error}</p>}
 
           <div className="feature-row">
-            <div><strong>3</strong><span>Reader themes</span></div>
+            <div><strong>1000+</strong><span>Pages, virtualized</span></div>
             <div><strong>100%</strong><span>Continuous scroll</span></div>
             <div><strong>Ctrl + Scroll</strong><span>Pinch zoom</span></div>
           </div>
@@ -490,10 +540,12 @@ export default function PdfReader() {
                     type="number"
                     min={1}
                     max={numPages || 1}
-                    value={activePage}
-                    onChange={e => {
-                      const v = parseInt(e.target.value, 10);
-                      if (!isNaN(v)) scrollToPage(v);
+                    value={pageInput}
+                    onFocus={() => setInputFocused(true)}
+                    onChange={e => setPageInput(e.target.value)}
+                    onBlur={commitPageInput}
+                    onKeyDown={e => {
+                      if (e.key === "Enter") (e.target as HTMLInputElement).blur();
                     }}
                     aria-label="Current page"
                   />
@@ -556,7 +608,7 @@ export default function PdfReader() {
               </div>
             </div>
 
-            {/* Continuous Vertical Scroll PDF Container */}
+            {/* Virtualized continuous scroll container */}
             <div className="pdf-scroll" ref={scrollRef}>
               <Document
                 file={file}
@@ -570,27 +622,37 @@ export default function PdfReader() {
                 }
                 error={<div className="doc-loading error">Could not render this PDF.</div>}
               >
-                <div className="pdf-book-container">
-                  {Array.from({ length: numPages }, (_, index) => {
-                    const pageNum = index + 1;
-                    const isRendered = pageNum >= renderedRange[0] && pageNum <= renderedRange[1];
-
-                    return (
-                      <BookPage
-                        key={pageNum}
-                        pageNumber={pageNum}
-                        pageWidth={pageWidth}
-                        pageColors={pageColors}
-                        theme={theme}
-                        isRendered={isRendered}
-                        setPageRef={(el) => {
-                          if (el) pageRefs.current.set(pageNum, el);
-                          else pageRefs.current.delete(pageNum);
-                        }}
-                      />
-                    );
-                  })}
-                </div>
+                {numPages > 0 && (
+                  <div
+                    className="pdf-book-container"
+                    style={{ position: "relative", height: `${totalSize}px`, width: `${pageWidth}px` }}
+                  >
+                    {virtualItems.map(vItem => {
+                      const pageNumber = vItem.index + 1;
+                      return (
+                        <div
+                          key={vItem.key}
+                          style={{
+                            position: "absolute",
+                            top: 0,
+                            left: 0,
+                            width: "100%",
+                            transform: `translateY(${vItem.start}px)`,
+                          }}
+                        >
+                          <VirtualPage
+                            pageNumber={pageNumber}
+                            pageWidth={pageWidth}
+                            estimatedHeight={estimatedPageHeight}
+                            pageColors={pageColors}
+                            gate={gate}
+                            measureRef={rowVirtualizer.measureElement}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </Document>
               {error && <p className="error-banner">{error}</p>}
             </div>
