@@ -5,6 +5,8 @@ import type { VirtualItem } from "@tanstack/react-virtual";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import type { PageRenderGate } from "@/hooks/usePageRenderGate";
 import { VirtualPdfPage } from "./VirtualPdfPage";
+import "react-pdf/dist/Page/TextLayer.css";
+import "react-pdf/dist/Page/AnnotationLayer.css";
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
 

@@ -846,6 +846,15 @@ kbd {
   box-shadow: 0 2px 8px var(--shadow), 0 14px 40px var(--shadow-lg);
   transition: box-shadow 200ms ease, width 150ms ease;
   background: var(--panel);
+  font-family: sans-serif;
+  font-size: initial;
+  letter-spacing: normal;
+}
+
+.pdf-page-shell .textLayer,
+.pdf-page-shell .annotationLayer {
+  line-height: 1;
+  letter-spacing: normal;
 }
 
 .pdf-page-shell:hover {
