@@ -49,6 +49,10 @@ Only the pages around the current scroll position are mounted. PDF rendering is 
 ## Main files
 
 - `app/page.tsx` — loads the PDF reader client-side
-- `components/PdfReader.tsx` — upload, PDF.js worker, virtual scrolling, navigation, rendering queue, theme state
-- `app/globals.css` — application and reader themes
-- `types/reader.ts` — theme type
+- `components/PdfReader.tsx` — reader composition and browser-only upload/fullscreen controls
+- `components/reader/` — header, landing state, sidebar, toolbar, PDF viewport, and virtual PDF page
+- `hooks/usePdfReader.ts` — PDF lifecycle, virtual scrolling, navigation, theme persistence, and zoom behavior
+- `hooks/usePageRenderGate.ts` — bounded PDF page rendering queue
+- `lib/reader.ts` — reader constants and pure helpers
+- `app/styles/reader.css` — reader styling and theme tokens
+- `types/reader.ts` — shared theme type
