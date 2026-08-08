@@ -1,4 +1,14 @@
 export type ReaderTheme = "midnight" | "oled" | "sepia" | "soft-dark" | "light";
+export type ReaderLayoutMode = "fit-width" | "actual-size";
+
+export type ReaderPosition = {
+  page: number;
+  offsetRatio: number;
+};
+
+export type ReaderMarker = ReaderPosition & {
+  createdAt: number;
+};
 
 export type ReaderTypography = {
   fontFamily: "inter" | "system" | "serif";
@@ -10,6 +20,7 @@ export type ReaderTypography = {
 export type ReaderPreferences = ReaderTypography & {
   theme: ReaderTheme;
   zoom: number;
+  layoutMode: ReaderLayoutMode;
   sidebarOpen: boolean;
 };
 
@@ -20,6 +31,11 @@ export type ReaderProgress = {
   lastModified: number;
   currentPage: number;
   totalPages: number;
+  scrollPosition: ReaderPosition;
+  progressPercent: number;
+  marker: ReaderMarker | null;
   zoom: number;
+  theme: ReaderTheme;
+  fontSize: ReaderTypography["fontSize"];
   lastOpenedAt: number;
 };

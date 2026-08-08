@@ -1,34 +1,73 @@
-import type { ChangeEvent, KeyboardEvent } from "react";
-import { MAX_ZOOM, MIN_ZOOM, ZOOM_STEP } from "@/lib/reader";
-import { ChevronLeft, ChevronRight, ExpandIcon, ShrinkIcon } from "./ReaderIcons";
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { MAX_ZOOM, MIN_ZOOM, themes, ZOOM_STEP } from "@/lib/reader";
+import type { ReaderLayoutMode, ReaderPreferences, ReaderTheme } from "@/types/reader";
+import { BookmarkIcon, SearchIcon } from "./ReaderIcons";
+
+type ToolbarMenu = "typography" | "theme" | "width" | "zoom" | null;
 
 type ReaderToolbarProps = {
-  activePage: number;
-  numPages: number;
-  pageInput: string;
+  preferences: ReaderPreferences;
   zoom: number;
-  isFullscreen: boolean;
-  sidebarOpen: boolean;
-  onPageInputChange: (value: string) => void;
-  onPageInputFocus: () => void;
-  onPageInputCommit: () => void;
-  onNavigate: (page: number) => void;
+  markerActive: boolean;
+  hasMarker: boolean;
+  onPreferencesChange: (update: Partial<ReaderPreferences>) => void;
   onZoom: (delta: number) => void;
+  onZoomChange: (zoom: number) => void;
   onResetZoom: () => void;
   onFitWidth: () => void;
+  onActualSize: () => void;
   onToggleSidebar: () => void;
-  onToggleFullscreen: () => void;
+  onToggleMarker: () => void;
 };
 
 export function ReaderToolbar(props: ReaderToolbarProps) {
-  const commitOnEnter = (event: KeyboardEvent<HTMLInputElement>) => { if (event.key === "Enter") event.currentTarget.blur(); };
-  const updatePage = (event: ChangeEvent<HTMLInputElement>) => props.onPageInputChange(event.target.value);
-  return <div className="reader-toolbar">
-    <div className="page-controls">
-      <button className="nav-btn" type="button" disabled={props.activePage <= 1} onClick={() => props.onNavigate(props.activePage - 1)} aria-label="Previous page" title="Previous page"><ChevronLeft /></button>
-      <div className="page-input-wrap"><input className="page-input" type="number" min={1} max={props.numPages || 1} value={props.pageInput} onFocus={props.onPageInputFocus} onChange={updatePage} onBlur={props.onPageInputCommit} onKeyDown={commitOnEnter} aria-label="Current page" /><span className="page-sep">/</span><span className="page-total">{props.numPages || "..."}</span></div>
-      <button className="nav-btn" type="button" disabled={!props.numPages || props.activePage >= props.numPages} onClick={() => props.onNavigate(props.activePage + 1)} aria-label="Next page" title="Next page"><ChevronRight /></button>
+  const [openMenu, setOpenMenu] = useState<ToolbarMenu>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const triggerRefs = useRef<Partial<Record<Exclude<ToolbarMenu, null>, HTMLButtonElement>>>({});
+
+  const closeMenu = () => {
+    const menu = openMenu;
+    setOpenMenu(null);
+    if (menu) window.requestAnimationFrame(() => triggerRefs.current[menu]?.focus());
+  };
+
+  useEffect(() => {
+    if (!openMenu) return;
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") { event.preventDefault(); closeMenu(); } };
+    const onPointerDown = (event: PointerEvent) => { if (!toolbarRef.current?.contains(event.target as Node)) setOpenMenu(null); };
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => { document.removeEventListener("keydown", onKeyDown); document.removeEventListener("pointerdown", onPointerDown); };
+  });
+
+  const toggleMenu = (menu: Exclude<ToolbarMenu, null>) => setOpenMenu((current) => current === menu ? null : menu);
+  const setLayout = (mode: ReaderLayoutMode) => { if (mode === "fit-width") props.onFitWidth(); else props.onActualSize(); closeMenu(); };
+  const setTheme = (theme: ReaderTheme) => props.onPreferencesChange({ theme });
+
+  return <div className="reader-toolbar compact-toolbar" role="toolbar" aria-label="Reader tools" ref={toolbarRef}>
+    <div className="compact-tools">
+      <button className="tool-btn sidebar-toggle" type="button" onClick={props.onToggleSidebar} aria-label={props.preferences.sidebarOpen ? "Hide sidebar" : "Show sidebar"} title={props.preferences.sidebarOpen ? "Hide sidebar" : "Show sidebar"}>☰</button>
+      <div className="toolbar-divider" />
+      <div className="toolbar-menu-wrap">
+        <button ref={(element) => { if (element) triggerRefs.current.typography = element; }} className={`toolbar-text-btn${openMenu === "typography" ? " active" : ""}`} type="button" onClick={() => toggleMenu("typography")} aria-expanded={openMenu === "typography"} aria-haspopup="dialog" title="Typography">Aa</button>
+        {openMenu === "typography" && <div className="toolbar-popover typography-popover" role="dialog" aria-label="Typography settings"><label>Font<select value={props.preferences.fontFamily} onChange={(event) => props.onPreferencesChange({ fontFamily: event.target.value as ReaderPreferences["fontFamily"] })}><option value="inter">Inter</option><option value="system">System</option><option value="serif">Serif</option></select></label><label>Size<select value={props.preferences.fontSize} onChange={(event) => props.onPreferencesChange({ fontSize: event.target.value as ReaderPreferences["fontSize"] })}><option value="compact">Compact</option><option value="comfortable">Comfortable</option><option value="large">Large</option></select></label><label>Line height<select value={props.preferences.lineHeight} onChange={(event) => props.onPreferencesChange({ lineHeight: event.target.value as ReaderPreferences["lineHeight"] })}><option value="compact">Compact</option><option value="comfortable">Comfortable</option><option value="relaxed">Relaxed</option></select></label><label>Spacing<select value={props.preferences.letterSpacing} onChange={(event) => props.onPreferencesChange({ letterSpacing: event.target.value as ReaderPreferences["letterSpacing"] })}><option value="normal">Normal</option><option value="wide">Wide</option></select></label></div>}
+      </div>
+      <div className="toolbar-menu-wrap">
+        <button ref={(element) => { if (element) triggerRefs.current.theme = element; }} className={`toolbar-text-btn${openMenu === "theme" ? " active" : ""}`} type="button" onClick={() => toggleMenu("theme")} aria-expanded={openMenu === "theme"} aria-haspopup="menu" title="Theme">Theme</button>
+        {openMenu === "theme" && <div className="toolbar-popover theme-popover" role="menu">{themes.map((theme) => <button type="button" role="menuitemradio" aria-checked={props.preferences.theme === theme.value} className={props.preferences.theme === theme.value ? "selected" : ""} key={theme.value} onClick={() => setTheme(theme.value)}><span className={`theme-swatch theme-${theme.value}`} />{theme.label}</button>)}</div>}
+      </div>
+      <div className="toolbar-menu-wrap">
+        <button ref={(element) => { if (element) triggerRefs.current.width = element; }} className={`toolbar-text-btn${openMenu === "width" ? " active" : ""}`} type="button" onClick={() => toggleMenu("width")} aria-expanded={openMenu === "width"} aria-haspopup="menu" title="Page width">Width</button>
+        {openMenu === "width" && <div className="toolbar-popover width-popover" role="menu"><button type="button" role="menuitemradio" aria-checked={props.preferences.layoutMode === "fit-width"} onClick={() => setLayout("fit-width")}>Fit width</button><button type="button" role="menuitemradio" aria-checked={props.preferences.layoutMode === "actual-size"} onClick={() => setLayout("actual-size")}>Actual size</button></div>}
+      </div>
+      <div className="toolbar-menu-wrap">
+        <button ref={(element) => { if (element) triggerRefs.current.zoom = element; }} className={`tool-btn${openMenu === "zoom" ? " active" : ""}`} type="button" onClick={() => toggleMenu("zoom")} aria-label="Zoom controls" aria-expanded={openMenu === "zoom"} aria-haspopup="dialog" title="Zoom"><SearchIcon /></button>
+        {openMenu === "zoom" && <div className="toolbar-popover zoom-popover" role="dialog" aria-label="Zoom controls"><button type="button" onClick={() => props.onZoom(-ZOOM_STEP)} disabled={props.zoom <= MIN_ZOOM} aria-label="Zoom out">−</button><input type="range" min={MIN_ZOOM} max={MAX_ZOOM} step={ZOOM_STEP} value={props.zoom} onChange={(event) => props.onZoomChange(Number(event.target.value))} aria-label="Zoom level" /><button type="button" onClick={() => props.onZoom(ZOOM_STEP)} disabled={props.zoom >= MAX_ZOOM} aria-label="Zoom in">+</button><button type="button" className="zoom-reset" onClick={props.onResetZoom}>Reset</button></div>}
+      </div>
+      <button className={`tool-btn bookmark-btn${props.markerActive ? " active" : ""}`} type="button" onClick={props.onToggleMarker} aria-label={props.markerActive ? "Remove marker from this page" : props.hasMarker ? "Replace saved marker with this page" : "Save this page as marker"} aria-pressed={props.markerActive} title={props.markerActive ? "Remove marker" : "Save marker"}><BookmarkIcon filled={props.markerActive} /></button>
+      <button className="zoom-percent" type="button" onClick={props.onResetZoom} title="Reset zoom to 100%">{Math.round(props.zoom * 100)}%</button>
     </div>
-    <div className="toolbar-actions"><button className="tool-btn sidebar-toggle" type="button" onClick={props.onToggleSidebar} aria-label={props.sidebarOpen ? "Hide sidebar" : "Show sidebar"} title={props.sidebarOpen ? "Hide sidebar" : "Show sidebar"}>☰</button><div className="zoom-controls"><button className="tool-btn" type="button" onClick={() => props.onZoom(-ZOOM_STEP)} disabled={props.zoom <= MIN_ZOOM} aria-label="Zoom out" title="Zoom out">-</button><button className="zoom-value" type="button" onClick={props.onResetZoom} title="Reset zoom">{Math.round(props.zoom * 100)}%</button><button className="tool-btn" type="button" onClick={() => props.onZoom(ZOOM_STEP)} disabled={props.zoom >= MAX_ZOOM} aria-label="Zoom in" title="Zoom in">+</button></div><button className="fit-width-btn" type="button" onClick={props.onFitWidth} title="Fit page width">Fit width</button><div className="toolbar-divider" /><button className="tool-btn" type="button" onClick={props.onToggleFullscreen} aria-label={props.isFullscreen ? "Exit fullscreen" : "Enter fullscreen"} title={props.isFullscreen ? "Exit fullscreen" : "Fullscreen"}>{props.isFullscreen ? <ShrinkIcon /> : <ExpandIcon />}</button></div>
   </div>;
 }

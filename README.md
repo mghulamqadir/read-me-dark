@@ -8,8 +8,9 @@ Read Me Dark is a browser-local PDF reader for focused reading sessions. PDFs ar
 - Continuous virtualized scrolling and progressive page rendering
 - Midnight, OLED Black, Sepia, Soft Dark, and Light themes
 - Persisted reader-interface typography preferences
-- Page navigation, zoom, fit width, fullscreen, and desktop sidebar controls
-- Local reading progress and metadata-only recent documents
+- Compact typography, theme, width, zoom, marker, and sidebar toolbar
+- Automatic page/scroll restoration plus one local resume marker per PDF
+- Keyboard page navigation, fullscreen, and metadata-only recent documents
 
 ## Run locally
 
@@ -29,4 +30,4 @@ npm run build
 
 ## Privacy and Limitations
 
-The reader stores preferences and document metadata/progress in `localStorage`. It does not store PDF blobs, so a recent document must be selected again before it can be reopened. Typography controls affect the reader interface only; they do not reflow an authored PDF.
+The reader stores preferences, document progress, and one manual marker per PDF in `localStorage`. It does not store PDF blobs, so a recent document must be selected again before it can be reopened. Typography controls affect the reader interface only; they do not reflow an authored PDF.

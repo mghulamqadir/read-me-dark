@@ -1,18 +1,30 @@
+import type { FormEvent } from "react";
 import { formatFileSize } from "@/lib/reader";
-import type { ReaderPreferences } from "@/types/reader";
+import type { ReaderMarker } from "@/types/reader";
 import { FileIcon } from "./ReaderIcons";
 
 type ReaderSidebarProps = {
   file: File;
   numPages: number;
-  preferences: ReaderPreferences;
-  onPreferencesChange: (update: Partial<ReaderPreferences>) => void;
+  currentPage: number;
+  progressPercent: number;
+  marker: ReaderMarker | null;
+  onNavigate: (page: number) => void;
+  onJumpToMarker: () => void;
+  onClearMarker: () => void;
 };
 
-export function ReaderSidebar({ file, numPages, preferences, onPreferencesChange }: ReaderSidebarProps) {
+export function ReaderSidebar({ file, numPages, currentPage, progressPercent, marker, onNavigate, onJumpToMarker, onClearMarker }: ReaderSidebarProps) {
+  const submitPage = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const value = new FormData(event.currentTarget).get("page");
+    onNavigate(Number(value));
+  };
+
   return <aside className="sidebar">
     <div className="file-card"><div className="file-icon"><FileIcon /></div><div className="file-info"><strong title={file.name}>{file.name}</strong><span>{formatFileSize(file.size)} · {numPages || "..."} pages</span></div></div>
-    <div className="sidebar-section"><span className="sidebar-label">Reader UI</span><label className="setting-row">Font<select value={preferences.fontFamily} onChange={(event) => onPreferencesChange({ fontFamily: event.target.value as ReaderPreferences["fontFamily"] })}><option value="inter">Inter</option><option value="system">System</option><option value="serif">Serif</option></select></label><label className="setting-row">Size<select value={preferences.fontSize} onChange={(event) => onPreferencesChange({ fontSize: event.target.value as ReaderPreferences["fontSize"] })}><option value="compact">Compact</option><option value="comfortable">Comfortable</option><option value="large">Large</option></select></label><label className="setting-row">Line height<select value={preferences.lineHeight} onChange={(event) => onPreferencesChange({ lineHeight: event.target.value as ReaderPreferences["lineHeight"] })}><option value="compact">Compact</option><option value="comfortable">Comfortable</option><option value="relaxed">Relaxed</option></select></label><label className="setting-row">Spacing<select value={preferences.letterSpacing} onChange={(event) => onPreferencesChange({ letterSpacing: event.target.value as ReaderPreferences["letterSpacing"] })}><option value="normal">Normal</option><option value="wide">Wide</option></select></label></div>
-    <div className="sidebar-section shortcut-section"><span className="sidebar-label">Shortcuts</span><div className="shortcut-list"><div className="shortcut-row"><kbd>Scroll</kbd><span>Continuous reading</span></div><div className="shortcut-row"><kbd>+ / -</kbd><span>Zoom</span></div><div className="shortcut-row"><kbd>Left / Right</kbd><span>Jump page</span></div><div className="shortcut-row"><kbd>0</kbd><span>Reset zoom</span></div></div></div>
+    <section className="sidebar-section reading-position" aria-labelledby="reading-position-title"><span className="sidebar-label" id="reading-position-title">Reading position</span><div className="reading-summary"><strong>Page {currentPage} of {numPages || "..."}</strong><span>{Math.round(progressPercent)}% complete</span></div><div className="reading-progress" role="progressbar" aria-label="Reading progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progressPercent)}><span style={{ width: `${progressPercent}%` }} /></div><form className="page-jump" onSubmit={submitPage}><label htmlFor="sidebar-page-input">Go to page</label><input key={currentPage} id="sidebar-page-input" name="page" type="number" min={1} max={numPages || 1} defaultValue={currentPage} /><button type="submit">Go</button></form></section>
+    <section className="sidebar-section marker-section" aria-labelledby="marker-title"><span className="sidebar-label" id="marker-title">Saved marker</span>{marker ? <><div className="marker-summary"><strong>Page {marker.page}</strong><span>Saved locally</span></div><div className="marker-actions"><button type="button" onClick={onJumpToMarker}>Jump to marker</button><button type="button" className="danger-text" onClick={onClearMarker}>Clear</button></div></> : <p className="sidebar-empty">Use the bookmark button to save one place in this PDF.</p>}</section>
+    <div className="sidebar-section shortcut-section"><span className="sidebar-label">Shortcuts</span><div className="shortcut-list"><div className="shortcut-row"><kbd>Scroll</kbd><span>Continuous reading</span></div><div className="shortcut-row"><kbd>+ / -</kbd><span>Zoom</span></div><div className="shortcut-row"><kbd>Left / Right</kbd><span>Previous / next page</span></div><div className="shortcut-row"><kbd>0</kbd><span>Reset zoom</span></div></div></div>
   </aside>;
 }

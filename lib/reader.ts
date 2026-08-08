@@ -24,6 +24,7 @@ export const defaultPreferences: ReaderPreferences = {
   lineHeight: "comfortable",
   letterSpacing: "normal",
   zoom: 1,
+  layoutMode: "fit-width",
   sidebarOpen: true,
 };
 
@@ -67,7 +68,7 @@ export function readProgress(): ReaderProgress[] {
   if (typeof window === "undefined") return [];
   try {
     const stored = JSON.parse(window.localStorage.getItem(PROGRESS_KEY) ?? "[]");
-    return Array.isArray(stored) ? stored.filter(isReaderProgress) : [];
+    return Array.isArray(stored) ? stored.filter(isReaderProgress).map(normalizeProgress) : [];
   } catch {
     return [];
   }
@@ -80,4 +81,24 @@ export function writeProgress(progress: ReaderProgress) {
 
 function isReaderProgress(value: unknown): value is ReaderProgress {
   return Boolean(value && typeof value === "object" && "id" in value && "name" in value && "currentPage" in value && "totalPages" in value);
+}
+
+function normalizeProgress(progress: ReaderProgress): ReaderProgress {
+  const page = clamp(Number(progress.currentPage) || 1, 1, Math.max(1, Number(progress.totalPages) || 1));
+  const offsetRatio = clamp(Number(progress.scrollPosition?.offsetRatio) || 0, 0, 1);
+  return {
+    ...progress,
+    currentPage: page,
+    scrollPosition: { page, offsetRatio },
+    progressPercent: clamp(Number(progress.progressPercent) || (page / Math.max(1, progress.totalPages)) * 100, 0, 100),
+    marker: progress.marker ? {
+      page: clamp(Number(progress.marker.page) || 1, 1, Math.max(1, progress.totalPages)),
+      offsetRatio: clamp(Number(progress.marker.offsetRatio) || 0, 0, 1),
+      createdAt: Number(progress.marker.createdAt) || Date.now(),
+    } : null,
+    zoom: clamp(Number(progress.zoom) || 1, MIN_ZOOM, MAX_ZOOM),
+    theme: themes.some((theme) => theme.value === progress.theme) ? progress.theme : defaultPreferences.theme,
+    fontSize: ["compact", "comfortable", "large"].includes(progress.fontSize) ? progress.fontSize : defaultPreferences.fontSize,
+    lastOpenedAt: Number(progress.lastOpenedAt) || Date.now(),
+  };
 }
