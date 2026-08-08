@@ -30,6 +30,7 @@ export function usePdfReader() {
   const positionRef = useRef<ReaderPosition>({ page: 1, offsetRatio: 0 });
   const saveTimerRef = useRef<number | null>(null);
   const horizontalAnchorRef = useRef<number | null>(null);
+  const zoomPositionRef = useRef<ReaderPosition | null>(null);
   const gate = usePageRenderGate(MAX_CONCURRENT_RENDERS);
   const pageColors = useMemo(() => getPageColors(preferences.theme), [preferences.theme]);
   const actualSizeBaseWidth = viewerWidth <= 640 ? viewerWidth : ACTUAL_PAGE_WIDTH;
@@ -38,25 +39,45 @@ export function usePdfReader() {
   const progressPercent = numPages ? clamp((activePage / numPages) * 100, 0, 100) : 0;
   const markerIsActive = Boolean(marker && marker.page === activePage);
   const virtualizer = useVirtualizer({ count: numPages, getScrollElement: () => scrollRef.current, estimateSize: () => estimatedPageHeight + PAGE_GAP, overscan: OVERSCAN, useFlushSync: false, measureElement: (element) => element.getBoundingClientRect().height + PAGE_GAP });
+  const captureViewportAnchor = useCallback(() => {
+    const element = scrollRef.current;
+    zoomPositionRef.current = { ...positionRef.current };
+    if (element) horizontalAnchorRef.current = (element.scrollLeft + element.clientWidth / 2) / Math.max(1, element.scrollWidth);
+  }, []);
 
   useEffect(() => { virtualizer.measure(); }, [aspectRatio, pageWidth, virtualizer]);
   useEffect(() => {
-    const anchor = horizontalAnchorRef.current;
-    if (anchor === null) return;
-    window.requestAnimationFrame(() => {
+    const horizontalAnchor = horizontalAnchorRef.current;
+    const verticalAnchor = zoomPositionRef.current;
+    if (horizontalAnchor === null && verticalAnchor === null) return;
+    if (verticalAnchor) virtualizer.scrollToIndex(verticalAnchor.page - 1, { align: "start" });
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
       const element = scrollRef.current;
-      if (element) element.scrollLeft = Math.max(0, anchor * element.scrollWidth - element.clientWidth / 2);
+      if (element && horizontalAnchor !== null) element.scrollLeft = Math.max(0, horizontalAnchor * element.scrollWidth - element.clientWidth / 2);
+      if (element && verticalAnchor) {
+        const item = virtualizer.getVirtualItems().find((virtualItem) => virtualItem.index === verticalAnchor.page - 1);
+        if (item) element.scrollTop = item.start + Math.max(0, item.size - PAGE_GAP) * verticalAnchor.offsetRatio;
+        positionRef.current = verticalAnchor;
+        setActivePage(verticalAnchor.page);
+        setPageInput(String(verticalAnchor.page));
+      }
       horizontalAnchorRef.current = null;
-    });
-  }, [pageWidth]);
+      zoomPositionRef.current = null;
+    }));
+  }, [pageWidth, virtualizer]);
   useEffect(() => { updatePreferences({ zoom }); }, [updatePreferences, zoom]);
   useEffect(() => {
     const element = scrollRef.current;
     if (!element) return;
-    const observer = new ResizeObserver(([entry]) => setViewerWidth(Math.min(Math.max(1, Math.floor(entry.contentRect.width)), 1080)));
+    const observer = new ResizeObserver(([entry]) => {
+      const nextWidth = Math.min(Math.max(1, Math.floor(entry.contentRect.width)), 1080);
+      if (nextWidth === viewerWidth) return;
+      captureViewportAnchor();
+      setViewerWidth(nextWidth);
+    });
     observer.observe(element);
     return () => observer.disconnect();
-  }, [file]);
+  }, [captureViewportAnchor, file, viewerWidth]);
 
   const buildProgress = useCallback((): ReaderProgress | null => {
     if (!file || !documentId || !numPages) return null;
@@ -118,21 +139,17 @@ export function usePdfReader() {
   }, [file, jumpToPosition, recentDocuments, updatePreferences]);
 
   const scrollToPage = useCallback((target: number) => jumpToPosition({ page: target, offsetRatio: 0 }, "smooth"), [jumpToPosition]);
-  const captureHorizontalAnchor = useCallback(() => {
-    const element = scrollRef.current;
-    if (element) horizontalAnchorRef.current = (element.scrollLeft + element.clientWidth / 2) / Math.max(1, element.scrollWidth);
-  }, []);
-  const changeZoom = useCallback((delta: number) => { captureHorizontalAnchor(); updatePreferences({ layoutMode: "actual-size" }); setZoom((current) => clamp(Number((current + delta).toFixed(2)), MIN_ZOOM, MAX_ZOOM)); }, [captureHorizontalAnchor, updatePreferences]);
-  const setZoomLevel = useCallback((value: number) => { captureHorizontalAnchor(); updatePreferences({ layoutMode: "actual-size" }); setZoom(clamp(value, MIN_ZOOM, MAX_ZOOM)); }, [captureHorizontalAnchor, updatePreferences]);
-  const resetZoom = useCallback(() => { captureHorizontalAnchor(); updatePreferences({ layoutMode: "actual-size" }); setZoom(1); }, [captureHorizontalAnchor, updatePreferences]);
-  const fitWidth = useCallback(() => { updatePreferences({ layoutMode: "fit-width" }); setZoom(1); }, [updatePreferences]);
-  const useActualSize = useCallback(() => updatePreferences({ layoutMode: "actual-size" }), [updatePreferences]);
+  const changeZoom = useCallback((delta: number) => { const nextZoom = clamp(Number((zoom + delta).toFixed(2)), MIN_ZOOM, MAX_ZOOM); if (Math.round(actualSizeBaseWidth * nextZoom) !== pageWidth) captureViewportAnchor(); updatePreferences({ layoutMode: "actual-size" }); setZoom(nextZoom); }, [actualSizeBaseWidth, captureViewportAnchor, pageWidth, updatePreferences, zoom]);
+  const setZoomLevel = useCallback((value: number) => { const nextZoom = clamp(value, MIN_ZOOM, MAX_ZOOM); if (Math.round(actualSizeBaseWidth * nextZoom) !== pageWidth) captureViewportAnchor(); updatePreferences({ layoutMode: "actual-size" }); setZoom(nextZoom); }, [actualSizeBaseWidth, captureViewportAnchor, pageWidth, updatePreferences]);
+  const resetZoom = useCallback(() => { if (Math.round(actualSizeBaseWidth) !== pageWidth) captureViewportAnchor(); updatePreferences({ layoutMode: "actual-size" }); setZoom(1); }, [actualSizeBaseWidth, captureViewportAnchor, pageWidth, updatePreferences]);
+  const fitWidth = useCallback(() => { if (viewerWidth !== pageWidth) captureViewportAnchor(); updatePreferences({ layoutMode: "fit-width" }); setZoom(1); }, [captureViewportAnchor, pageWidth, updatePreferences, viewerWidth]);
+  const useActualSize = useCallback(() => { if (Math.round(actualSizeBaseWidth * zoom) !== pageWidth) captureViewportAnchor(); updatePreferences({ layoutMode: "actual-size" }); }, [actualSizeBaseWidth, captureViewportAnchor, pageWidth, updatePreferences, zoom]);
 
   useEffect(() => {
     const element = scrollRef.current;
     if (!element || !numPages) return;
     let frame = 0;
-    const onScroll = () => { if (frame) return; frame = requestAnimationFrame(() => { frame = 0; const items = virtualizer.getVirtualItems(); if (!items.length) return; const current = items.find((item) => item.start + item.size > element.scrollTop + 4) ?? items[0]; const page = current.index + 1; const offsetRatio = clamp((element.scrollTop - current.start) / Math.max(1, current.size - PAGE_GAP), 0, 1); positionRef.current = { page, offsetRatio }; setActivePage(page); if (!inputFocused) setPageInput(String(page)); scheduleProgressSave(); }); };
+    const onScroll = () => { if (frame) return; frame = requestAnimationFrame(() => { frame = 0; if (zoomPositionRef.current) return; const items = virtualizer.getVirtualItems(); if (!items.length) return; const current = items.find((item) => item.start + item.size > element.scrollTop + 4) ?? items[0]; const page = current.index + 1; const offsetRatio = clamp((element.scrollTop - current.start) / Math.max(1, current.size - PAGE_GAP), 0, 1); positionRef.current = { page, offsetRatio }; setActivePage(page); if (!inputFocused) setPageInput(String(page)); scheduleProgressSave(); }); };
     element.addEventListener("scroll", onScroll, { passive: true });
     return () => { element.removeEventListener("scroll", onScroll); if (frame) cancelAnimationFrame(frame); };
   }, [inputFocused, numPages, scheduleProgressSave, virtualizer]);
