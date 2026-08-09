@@ -1,0 +1,58 @@
+.loader {
+  --rmd-loader-theme-bg: #070b13;
+  --rmd-loader-active-bg: var(--rmd-loader-bg, var(--rmd-loader-theme-bg));
+
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  min-height: 100svh;
+  overflow: hidden;
+  background: var(--rmd-loader-active-bg);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease, visibility 180ms ease;
+  visibility: hidden;
+}
+
+.loader[data-visible="true"] {
+  opacity: 1;
+  visibility: visible;
+}
+
+.loader[data-theme="oled"] {
+  --rmd-loader-theme-bg: #000000;
+}
+
+.video {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  transform: translateZ(0);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  white-space: nowrap;
+  border: 0;
+  clip: rect(0, 0, 0, 0);
+}
+
+@media (max-aspect-ratio: 4 / 3) {
+  .video {
+    object-fit: contain;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .video {
+    opacity: 0.9;
+  }
+}
