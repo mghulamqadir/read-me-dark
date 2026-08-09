@@ -45,9 +45,10 @@ button:disabled {
   --muted: #6f6c66;
   --faint: #b0aca4;
   --line: #dcd8d0;
-  --accent: #4a6741;
-  --accent-lt: #6a9e60;
-  --accent-glow: rgba(74, 103, 65, 0.16);
+  --accent: #3b6e36;
+  --accent-lt: #52924b;
+  --accent-contrast: #ffffff;
+  --accent-glow: rgba(59, 110, 54, 0.18);
   --viewer-bg: #d9d5ce;
   --shadow: rgba(0, 0, 0, 0.10);
   --shadow-lg: rgba(0, 0, 0, 0.22);
@@ -69,9 +70,10 @@ button:disabled {
   --muted: #8a9590;
   --faint: #4a5550;
   --line: #252c2a;
-  --accent: #5dc9a8;
-  --accent-lt: #7ddbb8;
-  --accent-glow: rgba(93, 201, 168, 0.14);
+  --accent: #2d9f7d;
+  --accent-lt: #48bfa1;
+  --accent-contrast: #ffffff;
+  --accent-glow: rgba(45, 159, 125, 0.20);
   --viewer-bg: #090b0b;
   --shadow: rgba(0, 0, 0, 0.40);
   --shadow-lg: rgba(0, 0, 0, 0.65);
@@ -79,20 +81,21 @@ button:disabled {
 }
 
 .reader-app[data-theme="midnight"] {
-  --bg: #0c0e0e;
-  --panel: #141818;
-  --panel2: #1c2020;
-  --glass: rgba(14, 18, 18, 0.85);
-  --text: #e4ede9;
-  --muted: #8a9590;
-  --faint: #4a5550;
-  --line: #252c2a;
-  --accent: #5dc9a8;
-  --accent-lt: #7ddbb8;
-  --accent-glow: rgba(93, 201, 168, 0.14);
-  --viewer-bg: #090b0b;
-  --shadow: rgba(0, 0, 0, 0.40);
-  --shadow-lg: rgba(0, 0, 0, 0.65);
+  --bg: #090d16;
+  --panel: #111726;
+  --panel2: #1a2236;
+  --glass: rgba(17, 23, 38, 0.85);
+  --text: #e2e8f0;
+  --muted: #8b9bb4;
+  --faint: #475569;
+  --line: #232f48;
+  --accent: #2563eb;
+  --accent-lt: #3b82f6;
+  --accent-contrast: #ffffff;
+  --accent-glow: rgba(37, 99, 235, 0.25);
+  --viewer-bg: #050810;
+  --shadow: rgba(0, 0, 0, 0.45);
+  --shadow-lg: rgba(0, 0, 0, 0.70);
   color-scheme: dark;
 }
 
@@ -105,9 +108,10 @@ button:disabled {
   --muted: #9ba49f;
   --faint: #515955;
   --line: #242424;
-  --accent: #66d9b5;
-  --accent-lt: #8be6c9;
-  --accent-glow: rgba(102, 217, 181, 0.14);
+  --accent: #10b981;
+  --accent-lt: #34d399;
+  --accent-contrast: #032017;
+  --accent-glow: rgba(16, 185, 129, 0.22);
   --viewer-bg: #000;
   --shadow: rgba(0, 0, 0, 0.7);
   --shadow-lg: rgba(0, 0, 0, 0.9);
@@ -123,9 +127,10 @@ button:disabled {
   --muted: #a5a9ae;
   --faint: #70757c;
   --line: #42474d;
-  --accent: #8bc5ff;
-  --accent-lt: #afd7ff;
-  --accent-glow: rgba(139, 197, 255, 0.16);
+  --accent: #2563eb;
+  --accent-lt: #3b82f6;
+  --accent-contrast: #ffffff;
+  --accent-glow: rgba(37, 99, 235, 0.25);
   --viewer-bg: #1b1d20;
   --shadow: rgba(0, 0, 0, 0.3);
   --shadow-lg: rgba(0, 0, 0, 0.55);
@@ -162,7 +167,8 @@ select:focus-visible {
   --line: #d8c8a8;
   --accent: #8a5c28;
   --accent-lt: #b07838;
-  --accent-glow: rgba(138, 92, 40, 0.14);
+  --accent-contrast: #ffffff;
+  --accent-glow: rgba(138, 92, 40, 0.16);
   --viewer-bg: #d0c09a;
   --shadow: rgba(60, 30, 0, 0.10);
   --shadow-lg: rgba(60, 30, 0, 0.26);
@@ -201,7 +207,7 @@ select:focus-visible {
   border-radius: 9px;
   background: linear-gradient(135deg, var(--accent), var(--accent-lt));
   box-shadow: 0 2px 8px var(--accent-glow);
-  color: #fff;
+  color: var(--accent-contrast, #ffffff);
   font-family: "Inter", system-ui, sans-serif;
   font-size: 10px;
   font-weight: 700;
@@ -415,7 +421,7 @@ select:focus-visible {
   border-radius: 10px;
   padding: 11px 24px;
   background: linear-gradient(135deg, var(--accent), var(--accent-lt));
-  color: #fff;
+  color: var(--accent-contrast, #ffffff);
   font-size: 13px;
   font-weight: 700;
   box-shadow: 0 4px 16px var(--accent-glow);
@@ -979,7 +985,7 @@ kbd {
 .sidebar-search-btn.primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--accent-contrast, #ffffff);
 }
 
 .sidebar-search-btn.primary:hover:not(:disabled) {
@@ -1084,7 +1090,7 @@ kbd {
   padding: 1px 6px;
   border-radius: 100px;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-contrast, #ffffff);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -1281,11 +1287,13 @@ kbd {
   letter-spacing: normal;
 }
 
+.pdf-page-shell .textLayer mark,
 .pdf-page-shell .textLayer .pdf-search-highlight {
-  border-radius: 3px;
-  background: rgba(255, 200, 0, 0.65);
-  color: inherit;
-  box-shadow: 0 0 0 2px rgba(255, 180, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  background: rgba(255, 200, 0, 0.45);
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+  box-shadow: 0 0 0 2px rgba(255, 180, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.15);
   transition: background 200ms, box-shadow 200ms;
 }
 
@@ -1293,9 +1301,10 @@ kbd {
 .reader-app[data-theme="midnight"] .pdf-page-shell .textLayer .pdf-search-highlight,
 .reader-app[data-theme="oled"] .pdf-page-shell .textLayer .pdf-search-highlight,
 .reader-app[data-theme="soft-dark"] .pdf-page-shell .textLayer .pdf-search-highlight {
-  background: rgba(93, 201, 168, 0.55);
-  color: #ffffff;
-  box-shadow: 0 0 0 2px rgba(93, 201, 168, 0.6), 0 0 12px rgba(93, 201, 168, 0.4);
+  background: rgba(52, 152, 119, 0.45);
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+  box-shadow: 0 0 0 2px rgba(93, 201, 168, 0.7), 0 0 12px rgba(93, 201, 168, 0.4);
 }
 
 .pdf-page-shell:hover {
