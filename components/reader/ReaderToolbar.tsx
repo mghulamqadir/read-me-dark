@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { PdfSearchResult } from "@/hooks/usePdfSearch";
 import { MAX_ZOOM, MIN_ZOOM, themes, ZOOM_STEP } from "@/lib/reader";
 import type { ReaderLayoutMode, ReaderPreferences, ReaderTheme } from "@/types/reader";
-import { BookmarkIcon, SearchIcon } from "./ReaderIcons";
+import { BookmarkIcon, ExpandIcon, SearchIcon, ShrinkIcon } from "./ReaderIcons";
 
 type ToolbarMenu = "typography" | "theme" | "width" | "search" | "zoom" | null;
 
@@ -13,6 +13,7 @@ type ReaderToolbarProps = {
   zoom: number;
   markerActive: boolean;
   hasMarker: boolean;
+  isFullscreen: boolean;
   searchQuery: string;
   searchResults: PdfSearchResult[];
   searchResultCount: number;
@@ -30,6 +31,7 @@ type ReaderToolbarProps = {
   onActualSize: () => void;
   onToggleSidebar: () => void;
   onToggleMarker: () => void;
+  onToggleFullscreen: () => void;
   onSearch: (query: string) => void | Promise<void>;
   onNextSearchResult: () => void;
   onPreviousSearchResult: () => void;
@@ -98,7 +100,17 @@ export function ReaderToolbar(props: ReaderToolbarProps) {
         {openMenu === "zoom" && <div className="toolbar-popover zoom-popover" role="dialog" aria-label="Zoom controls"><button type="button" onClick={() => props.onZoom(-ZOOM_STEP)} disabled={props.zoom <= MIN_ZOOM} aria-label="Zoom out">−</button><input type="range" min={MIN_ZOOM} max={MAX_ZOOM} step={ZOOM_STEP} value={props.zoom} onChange={(event) => props.onZoomChange(Number(event.target.value))} aria-label="Zoom level" /><button type="button" onClick={() => props.onZoom(ZOOM_STEP)} disabled={props.zoom >= MAX_ZOOM} aria-label="Zoom in">+</button><button type="button" className="zoom-reset" onClick={props.onResetZoom}>Reset</button></div>}
       </div>
       <button className={`tool-btn bookmark-btn${props.markerActive ? " active" : ""}`} type="button" onClick={props.onToggleMarker} aria-label={props.markerActive ? "Remove marker from this page" : props.hasMarker ? "Replace saved marker with this page" : "Save this page as marker"} aria-pressed={props.markerActive} title={props.markerActive ? "Remove marker" : "Save marker"}><BookmarkIcon filled={props.markerActive} /></button>
+      <button
+        className={`tool-btn${props.isFullscreen ? " active" : ""}`}
+        type="button"
+        onClick={props.onToggleFullscreen}
+        aria-label={props.isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+        title={props.isFullscreen ? "Exit fullscreen (F)" : "Enter fullscreen (F)"}
+      >
+        {props.isFullscreen ? <ShrinkIcon /> : <ExpandIcon />}
+      </button>
       <button className="zoom-percent" type="button" onClick={props.onResetZoom} title="Reset zoom to 100%">{Math.round(props.zoom * 100)}%</button>
     </div>
   </div>;
 }
+
