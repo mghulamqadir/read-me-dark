@@ -235,6 +235,18 @@ select:focus-visible {
   margin-top: 3px;
 }
 
+.brand-text span.active-book-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: none;
+  letter-spacing: normal;
+  max-width: 260px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Theme switcher — lives in topbar ONLY */
 .theme-switcher {
   display: flex;

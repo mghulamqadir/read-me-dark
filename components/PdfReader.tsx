@@ -60,8 +60,23 @@ export default function PdfReader() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [reader.file, toggleFullscreen]);
 
+  useEffect(() => {
+    if (reader.file) {
+      const cleanTitle = reader.file.name.replace(/\.pdf$/i, "");
+      document.title = `${cleanTitle} — Read Me Dark`;
+      const urlSlug = encodeURIComponent(cleanTitle.replace(/\s+/g, "-"));
+      const newUrl = `${window.location.pathname}?book=${urlSlug}`;
+      window.history.replaceState({ ...window.history.state, book: cleanTitle }, "", newUrl);
+    } else {
+      document.title = "Read Me Dark — Dark Mode PDF Reader";
+      if (window.location.search.includes("book=")) {
+        window.history.replaceState({ ...window.history.state }, "", window.location.pathname);
+      }
+    }
+  }, [reader.file]);
+
   return <main className="reader-app" data-theme={reader.preferences.theme} data-font={reader.preferences.fontFamily} data-font-size={reader.preferences.fontSize} data-line-height={reader.preferences.lineHeight} data-letter-spacing={reader.preferences.letterSpacing}>
-    <ReaderHeader hasFile={Boolean(reader.file)} theme={reader.preferences.theme} onThemeChange={(theme) => reader.updatePreferences({ theme })} onOpenFile={openFilePicker} />
+    <ReaderHeader hasFile={Boolean(reader.file)} fileName={reader.file?.name} theme={reader.preferences.theme} onThemeChange={(theme) => reader.updatePreferences({ theme })} onOpenFile={openFilePicker} />
     <input ref={fileInputRef} type="file" accept="application/pdf,.pdf" onChange={onFileChange} className="sr-only" />
     {!reader.file ? <ReaderLanding dragging={dragging} error={reader.error} recentDocuments={reader.recentDocuments} onOpenFile={openFilePicker} onDragEnter={onDragEnter} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} /> : <section className={`reader-layout${isFullscreen ? " fullscreen" : ""}${reader.preferences.sidebarOpen ? " sidebar-open" : " sidebar-closed"}`} ref={readerRef}>
       {reader.preferences.sidebarOpen && <ReaderSidebar file={reader.file} numPages={reader.numPages} currentPage={reader.activePage} progressPercent={reader.progressPercent} marker={reader.marker} searchQuery={reader.search.query} searchResults={reader.search.results} searchCurrentIndex={reader.search.currentIndex} searchCurrentPage={reader.search.results[reader.search.currentIndex]?.page ?? null} searchIsRunning={reader.search.isSearching} searchScannedPages={reader.search.scannedPages} searchTotalPages={reader.search.totalPages} searchError={reader.search.error} onSearch={reader.search.runSearch} onNextSearchResult={reader.search.nextResult} onPreviousSearchResult={reader.search.previousResult} onSelectSearchResultIndex={reader.search.selectResultIndex} onClearSearch={reader.search.clearSearch} onNavigate={reader.scrollToPage} onJumpToMarker={reader.jumpToMarker} onClearMarker={reader.clearMarker} searchInputRef={searchInputRef} />}
