@@ -199,6 +199,24 @@ select:focus-visible {
   gap: 10px;
 }
 
+.clickable-brand {
+  cursor: pointer;
+  user-select: none;
+  border-radius: 8px;
+  padding: 4px 6px;
+  margin-left: -6px;
+  transition: opacity 130ms ease, transform 130ms ease;
+}
+
+.clickable-brand:hover {
+  opacity: 0.88;
+  transform: translateY(-1px);
+}
+
+.clickable-brand:active {
+  transform: translateY(0);
+}
+
 .brand-mark {
   width: 42px;
   height: 32px;

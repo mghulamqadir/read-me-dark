@@ -12,6 +12,20 @@ import { useReadingProgress } from "./useReadingProgress";
 
 const ACTUAL_PAGE_WIDTH = 816;
 
+function calculateProgressPercent(position: ReaderPosition, totalPages: number) {
+  if (!totalPages) return 0;
+  const completedPages = clamp(position.page - 1, 0, totalPages);
+  const pageOffset = position.page >= totalPages ? position.offsetRatio : clamp(position.offsetRatio, 0, 1);
+  return clamp(((completedPages + pageOffset) / totalPages) * 100, 0, 100);
+}
+
+function calculateScrollProgressPercent(element: HTMLElement | null, fallbackPosition: ReaderPosition, totalPages: number) {
+  if (!element) return calculateProgressPercent(fallbackPosition, totalPages);
+  const scrollableDistance = element.scrollHeight - element.clientHeight;
+  if (scrollableDistance <= 0) return 100;
+  return clamp((element.scrollTop / scrollableDistance) * 100, 0, 100);
+}
+
 export function usePdfReader() {
   const { preferences, updatePreferences } = useReaderPreferences();
   const { recentDocuments, saveProgress } = useReadingProgress();
@@ -20,6 +34,7 @@ export function usePdfReader() {
   const [documentId, setDocumentId] = useState<string | null>(null);
   const [numPages, setNumPages] = useState(0);
   const [activePage, setActivePage] = useState(1);
+  const [scrollProgressPercent, setScrollProgressPercent] = useState(0);
   const [pageInput, setPageInput] = useState("1");
   const [inputFocused, setInputFocused] = useState(false);
   const [zoom, setZoom] = useState(preferences.zoom);
@@ -40,7 +55,7 @@ export function usePdfReader() {
   const actualSizeBaseWidth = viewerWidth <= 640 ? viewerWidth : ACTUAL_PAGE_WIDTH;
   const pageWidth = preferences.layoutMode === "fit-width" ? viewerWidth : Math.round(actualSizeBaseWidth * zoom);
   const estimatedPageHeight = Math.round(pageWidth * aspectRatio);
-  const progressPercent = numPages ? clamp((activePage / numPages) * 100, 0, 100) : 0;
+  const progressPercent = numPages ? scrollProgressPercent : 0;
   const markerIsActive = Boolean(marker && marker.page === activePage);
   const virtualizer = useVirtualizer({ count: numPages, getScrollElement: () => scrollRef.current, estimateSize: () => estimatedPageHeight + PAGE_GAP, overscan: OVERSCAN, useFlushSync: false, measureElement: (element) => element.getBoundingClientRect().height + PAGE_GAP });
   const captureViewportAnchor = useCallback(() => {
@@ -62,6 +77,7 @@ export function usePdfReader() {
         const item = virtualizer.getVirtualItems().find((virtualItem) => virtualItem.index === verticalAnchor.page - 1);
         if (item) element.scrollTop = item.start + Math.max(0, item.size - PAGE_GAP) * verticalAnchor.offsetRatio;
         positionRef.current = verticalAnchor;
+        setScrollProgressPercent(calculateScrollProgressPercent(element, verticalAnchor, numPages));
         setActivePage(verticalAnchor.page);
         setPageInput(String(verticalAnchor.page));
       }
@@ -86,7 +102,7 @@ export function usePdfReader() {
   const buildProgress = useCallback((): ReaderProgress | null => {
     if (!file || !documentId || !numPages) return null;
     const position = positionRef.current;
-    return { id: documentId, name: file.name, size: file.size, lastModified: file.lastModified, currentPage: position.page, totalPages: numPages, scrollPosition: position, progressPercent: clamp((position.page / numPages) * 100, 0, 100), marker, zoom, theme: preferences.theme, fontSize: preferences.fontSize, lastOpenedAt: Date.now() };
+    return { id: documentId, name: file.name, size: file.size, lastModified: file.lastModified, currentPage: position.page, totalPages: numPages, scrollPosition: position, progressPercent: calculateScrollProgressPercent(scrollRef.current, position, numPages), marker, zoom, theme: preferences.theme, fontSize: preferences.fontSize, lastOpenedAt: Date.now() };
   }, [documentId, file, marker, numPages, preferences.fontSize, preferences.theme, zoom]);
 
   const flushProgress = useCallback(() => {
@@ -113,18 +129,19 @@ export function usePdfReader() {
   const loadFile = useCallback((nextFile: File | undefined) => {
     if (!nextFile || nextFile.size === 0) { setError("Please select a non-empty PDF file."); return; }
     if (nextFile.type !== "application/pdf" && !nextFile.name.toLowerCase().endsWith(".pdf")) { setError("Please select a PDF file."); return; }
-    flushProgress(); gate.reset(); clearPdfSearch(); positionRef.current = { page: 1, offsetRatio: 0 };
+    flushProgress(); gate.reset(); clearPdfSearch(); positionRef.current = { page: 1, offsetRatio: 0 }; setScrollProgressPercent(0);
     setError(null); setFile(nextFile); setPdfProxy(null); setDocumentId(null); setNumPages(0); setActivePage(1); setPageInput("1"); setMarker(null); setZoom(preferences.zoom); setAspectRatio(1.414); setSessionId((current) => current + 1);
   }, [clearPdfSearch, flushProgress, gate, preferences.zoom]);
 
   const clearFileAfterError = useCallback((message: string) => {
-    gate.reset(); clearPdfSearch(); setFile(null); setPdfProxy(null); setDocumentId(null); setNumPages(0); setMarker(null); setError(message); setSessionId((current) => current + 1);
+    gate.reset(); clearPdfSearch(); positionRef.current = { page: 1, offsetRatio: 0 }; setScrollProgressPercent(0); setFile(null); setPdfProxy(null); setDocumentId(null); setNumPages(0); setMarker(null); setError(message); setSessionId((current) => current + 1);
   }, [clearPdfSearch, gate]);
 
   const jumpToPosition = useCallback((position: ReaderPosition, behavior: ScrollBehavior = "auto", align: "start" | "center" = "start") => {
     const page = clamp(position.page, 1, numPages || position.page || 1);
     const offsetRatio = clamp(position.offsetRatio, 0, 1);
-    setActivePage(page); setPageInput(String(page)); positionRef.current = { page, offsetRatio };
+    const nextPosition = { page, offsetRatio };
+    setActivePage(page); setPageInput(String(page)); positionRef.current = nextPosition; setScrollProgressPercent(calculateProgressPercent(nextPosition, numPages));
     virtualizer.scrollToIndex(page - 1, { align, behavior });
     window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
       const container = scrollRef.current;
@@ -181,7 +198,7 @@ export function usePdfReader() {
     const element = scrollRef.current;
     if (!element || !numPages) return;
     let frame = 0;
-    const onScroll = () => { if (frame) return; frame = requestAnimationFrame(() => { frame = 0; if (zoomPositionRef.current) return; const items = virtualizer.getVirtualItems(); if (!items.length) return; const current = items.find((item) => item.start + item.size > element.scrollTop + 4) ?? items[0]; const page = current.index + 1; const offsetRatio = clamp((element.scrollTop - current.start) / Math.max(1, current.size - PAGE_GAP), 0, 1); positionRef.current = { page, offsetRatio }; setActivePage(page); if (!inputFocused) setPageInput(String(page)); scheduleProgressSave(); }); };
+    const onScroll = () => { if (frame) return; frame = requestAnimationFrame(() => { frame = 0; if (zoomPositionRef.current) return; const items = virtualizer.getVirtualItems(); if (!items.length) return; const current = items.find((item) => item.start + item.size > element.scrollTop + 4) ?? items[0]; const page = current.index + 1; const offsetRatio = clamp((element.scrollTop - current.start) / Math.max(1, current.size - PAGE_GAP), 0, 1); const position = { page, offsetRatio }; positionRef.current = position; setScrollProgressPercent(calculateScrollProgressPercent(element, position, numPages)); setActivePage(page); if (!inputFocused) setPageInput(String(page)); scheduleProgressSave(); }); };
     element.addEventListener("scroll", onScroll, { passive: true });
     return () => { element.removeEventListener("scroll", onScroll); if (frame) cancelAnimationFrame(frame); };
   }, [inputFocused, numPages, scheduleProgressSave, virtualizer]);
@@ -202,5 +219,20 @@ export function usePdfReader() {
   const previousSearchResult = useCallback(() => { const result = selectPreviousSearchResult(); if (result) jumpToPosition({ page: result.page, offsetRatio: result.offsetRatio ?? 0 }, "smooth", "center"); }, [jumpToPosition, selectPreviousSearchResult]);
   const selectSearchResultIndex = useCallback((index: number) => { const result = selectPdfSearchResultIndex(index); if (result) jumpToPosition({ page: result.page, offsetRatio: result.offsetRatio ?? 0 }, "smooth", "center"); }, [jumpToPosition, selectPdfSearchResultIndex]);
 
-  return { file, sessionId, numPages, activePage, pageInput, zoom, preferences, error, pageColors, pageWidth, estimatedPageHeight, progressPercent, marker, markerIsActive, search: { query: pdfSearch.query, results: pdfSearch.results, currentIndex: pdfSearch.currentIndex, isSearching: pdfSearch.isSearching, scannedPages: pdfSearch.scannedPages, totalPages: pdfSearch.totalPages, error: pdfSearch.error, runSearch, nextResult: nextSearchResult, previousResult: previousSearchResult, selectResultIndex: selectSearchResultIndex, clearSearch: clearPdfSearch }, scrollRef, gate, virtualItems: virtualizer.getVirtualItems(), totalSize: virtualizer.getTotalSize(), measureElement: virtualizer.measureElement, recentDocuments, loadFile, onDocumentLoadSuccess, onDocumentLoadError: clearFileAfterError, scrollToPage, changeZoom, setZoomLevel, resetZoom, fitWidth, useActualSize, toggleMarker, jumpToMarker, clearMarker, updatePreferences, setPageInput, setInputFocused, commitPageInput };
+  const closeFile = useCallback(() => {
+    flushProgress();
+    gate.reset();
+    clearPdfSearch();
+    positionRef.current = { page: 1, offsetRatio: 0 };
+    setScrollProgressPercent(0);
+    setFile(null);
+    setPdfProxy(null);
+    setDocumentId(null);
+    setNumPages(0);
+    setMarker(null);
+    setError(null);
+    setSessionId((current) => current + 1);
+  }, [clearPdfSearch, flushProgress, gate]);
+
+  return { file, sessionId, numPages, activePage, pageInput, zoom, preferences, error, pageColors, pageWidth, estimatedPageHeight, progressPercent, marker, markerIsActive, search: { query: pdfSearch.query, results: pdfSearch.results, currentIndex: pdfSearch.currentIndex, isSearching: pdfSearch.isSearching, scannedPages: pdfSearch.scannedPages, totalPages: pdfSearch.totalPages, error: pdfSearch.error, runSearch, nextResult: nextSearchResult, previousResult: previousSearchResult, selectResultIndex: selectSearchResultIndex, clearSearch: clearPdfSearch }, scrollRef, gate, virtualItems: virtualizer.getVirtualItems(), totalSize: virtualizer.getTotalSize(), measureElement: virtualizer.measureElement, recentDocuments, loadFile, closeFile, onDocumentLoadSuccess, onDocumentLoadError: clearFileAfterError, scrollToPage, changeZoom, setZoomLevel, resetZoom, fitWidth, useActualSize, toggleMarker, jumpToMarker, clearMarker, updatePreferences, setPageInput, setInputFocused, commitPageInput };
 }

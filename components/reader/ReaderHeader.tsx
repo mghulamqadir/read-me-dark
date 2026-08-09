@@ -7,16 +7,29 @@ type ReaderHeaderProps = {
   theme: ReaderTheme;
   onThemeChange: (theme: ReaderTheme) => void;
   onOpenFile: () => void;
+  onGoHome?: () => void;
 };
 
 const themeIcons = { midnight: "☾", oled: "●", light: "☀", sepia: "◐", "soft-dark": "◒" };
 
-export function ReaderHeader({ hasFile, fileName, theme, onThemeChange, onOpenFile }: ReaderHeaderProps) {
+export function ReaderHeader({ hasFile, fileName, theme, onThemeChange, onOpenFile, onGoHome }: ReaderHeaderProps) {
   const cleanName = fileName ? fileName.replace(/\.pdf$/i, "") : null;
 
   return (
     <header className="topbar">
-      <div className="brand">
+      <div
+        className="brand clickable-brand"
+        onClick={onGoHome}
+        role="button"
+        tabIndex={0}
+        title="Go to home page"
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onGoHome?.();
+          }
+        }}
+      >
         <div className="brand-mark" aria-hidden="true"><span>RMD</span></div>
         <div className="brand-text">
           <strong>Read Me Dark</strong>
