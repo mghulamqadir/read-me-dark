@@ -8,6 +8,7 @@ import { ReaderLanding } from "@/components/reader/ReaderLanding";
 import { ReaderSidebar } from "@/components/reader/ReaderSidebar";
 import { ReaderToolbar } from "@/components/reader/ReaderToolbar";
 import { usePdfReader } from "@/hooks/usePdfReader";
+import { downloadThemedPdf } from "@/lib/pdfDownload";
 
 export default function PdfReader() {
   const reader = usePdfReader();
@@ -16,6 +17,8 @@ export default function PdfReader() {
   const readerRef = useRef<HTMLElement>(null);
   const [dragging, setDragging] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<{ page: number; total: number } | null>(null);
+  const downloadAbortRef = useRef<AbortController | null>(null);
 
   const openFilePicker = useCallback(() => fileInputRef.current?.click(), []);
   const onFileChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
@@ -42,6 +45,28 @@ export default function PdfReader() {
       searchInputRef.current?.select();
     });
   }, [reader]);
+
+  const handleDownload = useCallback(async () => {
+    if (!reader.file || downloadProgress) return;
+    const abortController = new AbortController();
+    downloadAbortRef.current = abortController;
+    setDownloadProgress({ page: 0, total: reader.numPages });
+    try {
+      await downloadThemedPdf(
+        reader.file,
+        reader.preferences.theme,
+        reader.numPages,
+        (progress) => setDownloadProgress(progress),
+        abortController.signal
+      );
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      console.error("PDF download failed:", error);
+    } finally {
+      setDownloadProgress(null);
+      downloadAbortRef.current = null;
+    }
+  }, [reader.file, reader.preferences.theme, reader.numPages, downloadProgress]);
 
   useEffect(() => {
     const syncFullscreenState = () => setIsFullscreen(Boolean(document.fullscreenElement));
@@ -81,7 +106,7 @@ export default function PdfReader() {
     {!reader.file ? <ReaderLanding dragging={dragging} error={reader.error} recentDocuments={reader.recentDocuments} onOpenFile={openFilePicker} onDragEnter={onDragEnter} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} /> : <section className={`reader-layout${isFullscreen ? " fullscreen" : ""}${reader.preferences.sidebarOpen ? " sidebar-open" : " sidebar-closed"}`} ref={readerRef}>
       {reader.preferences.sidebarOpen && <ReaderSidebar file={reader.file} numPages={reader.numPages} currentPage={reader.activePage} progressPercent={reader.progressPercent} marker={reader.marker} searchQuery={reader.search.query} searchResults={reader.search.results} searchCurrentIndex={reader.search.currentIndex} searchCurrentPage={reader.search.results[reader.search.currentIndex]?.page ?? null} searchIsRunning={reader.search.isSearching} searchScannedPages={reader.search.scannedPages} searchTotalPages={reader.search.totalPages} searchError={reader.search.error} onSearch={reader.search.runSearch} onNextSearchResult={reader.search.nextResult} onPreviousSearchResult={reader.search.previousResult} onSelectSearchResultIndex={reader.search.selectResultIndex} onClearSearch={reader.search.clearSearch} onNavigate={reader.scrollToPage} onJumpToMarker={reader.jumpToMarker} onClearMarker={reader.clearMarker} searchInputRef={searchInputRef} />}
       <div className="viewer-column">
-        <ReaderToolbar preferences={reader.preferences} zoom={reader.zoom} markerActive={reader.markerIsActive} hasMarker={Boolean(reader.marker)} isFullscreen={isFullscreen} searchQuery={reader.search.query} searchResults={reader.search.results} searchResultCount={reader.search.results.length} searchCurrentIndex={reader.search.currentIndex} searchCurrentPage={reader.search.results[reader.search.currentIndex]?.page ?? null} searchIsRunning={reader.search.isSearching} searchScannedPages={reader.search.scannedPages} searchTotalPages={reader.search.totalPages} searchError={reader.search.error} onPreferencesChange={reader.updatePreferences} onZoom={reader.changeZoom} onZoomChange={reader.setZoomLevel} onResetZoom={reader.resetZoom} onFitWidth={reader.fitWidth} onActualSize={reader.useActualSize} onToggleSidebar={() => reader.updatePreferences({ sidebarOpen: !reader.preferences.sidebarOpen })} onToggleMarker={reader.toggleMarker} onToggleFullscreen={toggleFullscreen} onSearch={reader.search.runSearch} onNextSearchResult={reader.search.nextResult} onPreviousSearchResult={reader.search.previousResult} onSelectSearchResultIndex={reader.search.selectResultIndex} onClearSearch={reader.search.clearSearch} onFocusSearch={focusSearch} />
+        <ReaderToolbar preferences={reader.preferences} zoom={reader.zoom} markerActive={reader.markerIsActive} hasMarker={Boolean(reader.marker)} isFullscreen={isFullscreen} searchQuery={reader.search.query} searchResults={reader.search.results} searchResultCount={reader.search.results.length} searchCurrentIndex={reader.search.currentIndex} searchCurrentPage={reader.search.results[reader.search.currentIndex]?.page ?? null} searchIsRunning={reader.search.isSearching} searchScannedPages={reader.search.scannedPages} searchTotalPages={reader.search.totalPages} searchError={reader.search.error} onPreferencesChange={reader.updatePreferences} onZoom={reader.changeZoom} onZoomChange={reader.setZoomLevel} onResetZoom={reader.resetZoom} onFitWidth={reader.fitWidth} onActualSize={reader.useActualSize} onToggleSidebar={() => reader.updatePreferences({ sidebarOpen: !reader.preferences.sidebarOpen })} onToggleMarker={reader.toggleMarker} onToggleFullscreen={toggleFullscreen} onSearch={reader.search.runSearch} onNextSearchResult={reader.search.nextResult} onPreviousSearchResult={reader.search.previousResult} onSelectSearchResultIndex={reader.search.selectResultIndex} onClearSearch={reader.search.clearSearch} onFocusSearch={focusSearch} onDownload={handleDownload} downloadProgress={downloadProgress} />
         <PdfViewport file={reader.file} sessionId={reader.sessionId} theme={reader.preferences.theme} numPages={reader.numPages} pageWidth={reader.pageWidth} estimatedPageHeight={reader.estimatedPageHeight} totalSize={reader.totalSize} virtualItems={reader.virtualItems} pageColors={reader.pageColors} highlightQuery={reader.search.query} gate={reader.gate} scrollRef={reader.scrollRef} measureElement={reader.measureElement} onLoadSuccess={reader.onDocumentLoadSuccess} onLoadError={reader.onDocumentLoadError} error={reader.error} />
         <footer className="reader-footer"><span>Continuous Scroll · Ctrl + Scroll to zoom · ← → to jump</span></footer>
       </div>

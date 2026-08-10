@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { PdfSearchResult } from "@/hooks/usePdfSearch";
 import { MAX_ZOOM, MIN_ZOOM, themes, ZOOM_STEP } from "@/lib/reader";
 import type { ReaderLayoutMode, ReaderPreferences, ReaderTheme } from "@/types/reader";
-import { BookmarkIcon, ExpandIcon, SearchIcon, ShrinkIcon } from "./ReaderIcons";
+import { BookmarkIcon, DownloadIcon, ExpandIcon, SearchIcon, ShrinkIcon, SpinnerIcon } from "./ReaderIcons";
 
 type ToolbarMenu = "typography" | "theme" | "width" | "search" | "zoom" | null;
 
@@ -38,6 +38,8 @@ type ReaderToolbarProps = {
   onSelectSearchResultIndex: (index: number) => void;
   onClearSearch: () => void;
   onFocusSearch: () => void;
+  onDownload: () => void;
+  downloadProgress: { page: number; total: number } | null;
 };
 
 
@@ -108,6 +110,37 @@ export function ReaderToolbar(props: ReaderToolbarProps) {
         title={props.isFullscreen ? "Exit fullscreen (F)" : "Enter fullscreen (F)"}
       >
         {props.isFullscreen ? <ShrinkIcon /> : <ExpandIcon />}
+      </button>
+      <div className="toolbar-divider" />
+      <button
+        id="download-pdf-btn"
+        className={`tool-btn download-btn${props.downloadProgress ? " downloading" : ""}`}
+        type="button"
+        onClick={props.onDownload}
+        disabled={!!props.downloadProgress}
+        aria-label={props.downloadProgress
+          ? `Generating PDF… ${props.downloadProgress.page} of ${props.downloadProgress.total} pages`
+          : "Download PDF in current theme"}
+        title={props.downloadProgress
+          ? `Processing page ${props.downloadProgress.page} of ${props.downloadProgress.total}…`
+          : "Download themed PDF"}
+      >
+        {props.downloadProgress ? (() => {
+          const pct = props.downloadProgress.total > 0
+            ? Math.round((props.downloadProgress.page / props.downloadProgress.total) * 100)
+            : 0;
+          return <>
+            <SpinnerIcon />
+            <span className="download-btn-label">{pct}%</span>
+            <span
+              className="download-progress-bar"
+              style={{ "--pct": `${pct}%` } as React.CSSProperties}
+              aria-hidden="true"
+            />
+          </>;
+        })() : (
+          <><DownloadIcon /><span className="download-btn-label">Download</span></>
+        )}
       </button>
       <button className="zoom-percent" type="button" onClick={props.onResetZoom} title="Reset zoom to 100%">{Math.round(props.zoom * 100)}%</button>
     </div>

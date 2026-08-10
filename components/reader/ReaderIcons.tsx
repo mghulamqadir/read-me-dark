@@ -14,3 +14,5 @@ export function ExpandIcon() { return <Icon size={15}><polyline points="15 3 21 
 export function ShrinkIcon() { return <Icon size={15}><polyline points="4 14 10 14 10 20" /><polyline points="20 10 14 10 14 4" /><line x1="14" y1="10" x2="21" y2="3" /><line x1="3" y1="21" x2="10" y2="14" /></Icon>; }
 export function SearchIcon() { return <Icon size={15}><circle cx="11" cy="11" r="7" /><line x1="20" y1="20" x2="16.2" y2="16.2" /></Icon>; }
 export function BookmarkIcon({ filled = false }: { filled?: boolean }) { return <svg width="15" height="15" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3h12v18l-6-4-6 4z" /></svg>; }
+export function DownloadIcon() { return <Icon size={15}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></Icon>; }
+export function SpinnerIcon() { return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="spin-icon"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>; }

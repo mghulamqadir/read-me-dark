@@ -1523,3 +1523,110 @@ kbd {
     margin: 0 2px;
   }
 }
+
+/* ─── Download Button ─────────────────────────────────────────── */
+.download-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: auto;
+  min-width: max-content;
+  flex-shrink: 0;
+  gap: 5px;
+  padding: 0 12px;
+  height: 30px;
+  border-radius: 20px;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  border: none;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  transition: background 180ms ease, transform 100ms ease, box-shadow 180ms ease;
+  box-shadow: 0 0 0 0 var(--accent-glow);
+  z-index: 0;
+}
+
+.download-btn:hover:not(:disabled) {
+  background: var(--accent-lt);
+  box-shadow: 0 0 0 4px var(--accent-glow);
+  transform: translateY(-1px);
+}
+
+.download-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+/* While generating: pill turns muted, progress bar fills underneath */
+.download-btn.downloading {
+  background: var(--panel2);
+  color: var(--text);
+  box-shadow: none;
+  cursor: default;
+  min-width: 90px;
+}
+
+.download-btn-label {
+  font-size: 12px;
+  position: relative;
+  z-index: 1;
+}
+
+/* Animated fill bar — driven by CSS custom property --pct */
+.download-progress-bar {
+  position: absolute;
+  inset: 0;
+  background: var(--accent);
+  width: var(--pct, 0%);
+  transition: width 300ms ease;
+  border-radius: inherit;
+  opacity: 0.28;
+  z-index: 0;
+}
+
+/* Spinner animation */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.spin-icon {
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+}
+
+@media (max-width: 460px) {
+  .reader-toolbar {
+    padding-inline: 6px;
+  }
+
+  .compact-tools {
+    gap: 3px;
+  }
+
+  .toolbar-text-btn {
+    padding-inline: 5px;
+  }
+
+  .download-btn,
+  .download-btn.downloading {
+    width: 30px;
+    min-width: 30px;
+    padding: 0;
+    justify-content: center;
+    border-radius: 7px;
+  }
+
+  .download-btn-label {
+    display: none;
+  }
+}
+
+@media (max-width: 380px) {
+  .zoom-percent {
+    display: none;
+  }
+}
