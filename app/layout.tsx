@@ -4,8 +4,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Read Me Dark - Distraction-Free PDF Reader",
-  description: "Read PDFs in a clean, customizable dark reading experience.",
+  title: "Read Me Dark — Give Any PDF a Dark Mode",
+  description: "Turn bright PDFs into comfortable themes, read privately, and download the version you love.",
   icons: {
     icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
     shortcut: "/icon.svg",
