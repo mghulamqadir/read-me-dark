@@ -61,6 +61,7 @@ export function readPreferences(): ReaderPreferences {
 }
 
 export function writePreferences(preferences: ReaderPreferences) {
+  if (typeof window === "undefined") return;
   window.localStorage.setItem(PREFERENCES_KEY, JSON.stringify(preferences));
 }
 
@@ -74,9 +75,10 @@ export function readProgress(): ReaderProgress[] {
   }
 }
 
-export function writeProgress(progress: ReaderProgress) {
+export function writeProgress(progress: ReaderProgress): ReaderProgress[] {
   const next = [progress, ...readProgress().filter((entry) => entry.id !== progress.id)].slice(0, 8);
   window.localStorage.setItem(PROGRESS_KEY, JSON.stringify(next));
+  return next;
 }
 
 function isReaderProgress(value: unknown): value is ReaderProgress {

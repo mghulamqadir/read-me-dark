@@ -22,7 +22,7 @@ function calculateProgressPercent(position: ReaderPosition, totalPages: number) 
 function calculateScrollProgressPercent(element: HTMLElement | null, fallbackPosition: ReaderPosition, totalPages: number) {
   if (!element) return calculateProgressPercent(fallbackPosition, totalPages);
   const scrollableDistance = element.scrollHeight - element.clientHeight;
-  if (scrollableDistance <= 0) return 100;
+  if (scrollableDistance <= 0) return totalPages ? 100 : 0;
   return clamp((element.scrollTop / scrollableDistance) * 100, 0, 100);
 }
 
@@ -57,7 +57,13 @@ export function usePdfReader() {
   const estimatedPageHeight = Math.round(pageWidth * aspectRatio);
   const progressPercent = numPages ? scrollProgressPercent : 0;
   const markerIsActive = Boolean(marker && marker.page === activePage);
+  // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({ count: numPages, getScrollElement: () => scrollRef.current, estimateSize: () => estimatedPageHeight + PAGE_GAP, overscan: OVERSCAN, useFlushSync: false, measureElement: (element) => element.getBoundingClientRect().height + PAGE_GAP });
+  const recentDocumentsRef = useRef(recentDocuments);
+  recentDocumentsRef.current = recentDocuments;
+  const viewerWidthRef = useRef(viewerWidth);
+  viewerWidthRef.current = viewerWidth;
+
   const captureViewportAnchor = useCallback(() => {
     const element = scrollRef.current;
     zoomPositionRef.current = { ...positionRef.current };
@@ -84,20 +90,20 @@ export function usePdfReader() {
       horizontalAnchorRef.current = null;
       zoomPositionRef.current = null;
     }));
-  }, [pageWidth, virtualizer]);
+  }, [numPages, pageWidth, virtualizer]);
   useEffect(() => { updatePreferences({ zoom }); }, [updatePreferences, zoom]);
   useEffect(() => {
     const element = scrollRef.current;
     if (!element) return;
     const observer = new ResizeObserver(([entry]) => {
       const nextWidth = Math.min(Math.max(1, Math.floor(entry.contentRect.width)), 1080);
-      if (nextWidth === viewerWidth) return;
+      if (nextWidth === viewerWidthRef.current) return;
       captureViewportAnchor();
       setViewerWidth(nextWidth);
     });
     observer.observe(element);
     return () => observer.disconnect();
-  }, [captureViewportAnchor, file, viewerWidth]);
+  }, [captureViewportAnchor, file]);
 
   const buildProgress = useCallback((): ReaderProgress | null => {
     if (!file || !documentId || !numPages) return null;
@@ -179,13 +185,13 @@ export function usePdfReader() {
 
   const onDocumentLoadSuccess = useCallback(async (pdf: PDFDocumentProxy) => {
     const identity = pdf.fingerprints?.[0] || (file ? documentFallbackId(file) : "unknown");
-    const previous = recentDocuments.find((entry) => entry.id === identity);
+    const previous = recentDocumentsRef.current.find((entry) => entry.id === identity);
     const restoredPosition = previous?.scrollPosition ?? { page: previous?.currentPage ?? 1, offsetRatio: 0 };
     setPdfProxy(pdf); setDocumentId(identity); setNumPages(pdf.numPages); setMarker(previous?.marker ?? null);
     if (previous) { setZoom(clamp(previous.zoom, MIN_ZOOM, MAX_ZOOM)); updatePreferences({ theme: previous.theme, fontSize: previous.fontSize, zoom: previous.zoom, layoutMode: "actual-size" }); }
     try { const firstPage = await pdf.getPage(1); const viewport = firstPage.getViewport({ scale: 1 }); setAspectRatio(viewport.height / viewport.width); } catch { /* Use the default document ratio. */ }
     window.requestAnimationFrame(() => jumpToPosition({ page: clamp(restoredPosition.page, 1, pdf.numPages), offsetRatio: restoredPosition.offsetRatio }));
-  }, [file, jumpToPosition, recentDocuments, updatePreferences]);
+  }, [file, jumpToPosition, updatePreferences]);
 
   const scrollToPage = useCallback((target: number) => jumpToPosition({ page: target, offsetRatio: 0 }, "smooth"), [jumpToPosition]);
   const changeZoom = useCallback((delta: number) => { const nextZoom = clamp(Number((zoom + delta).toFixed(2)), MIN_ZOOM, MAX_ZOOM); if (Math.round(actualSizeBaseWidth * nextZoom) !== pageWidth) captureViewportAnchor(); updatePreferences({ layoutMode: "actual-size" }); setZoom(nextZoom); }, [actualSizeBaseWidth, captureViewportAnchor, pageWidth, updatePreferences, zoom]);

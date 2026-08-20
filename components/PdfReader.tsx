@@ -19,6 +19,7 @@ export default function PdfReader() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<{ page: number; total: number } | null>(null);
   const downloadAbortRef = useRef<AbortController | null>(null);
+  const downloadInProgressRef = useRef(false);
 
   const openFilePicker = useCallback(() => fileInputRef.current?.click(), []);
   const onFileChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
@@ -47,9 +48,10 @@ export default function PdfReader() {
   }, [reader]);
 
   const handleDownload = useCallback(async () => {
-    if (!reader.file || downloadProgress) return;
+    if (!reader.file || downloadInProgressRef.current) return;
     const abortController = new AbortController();
     downloadAbortRef.current = abortController;
+    downloadInProgressRef.current = true;
     setDownloadProgress({ page: 0, total: reader.numPages });
     try {
       await downloadThemedPdf(
@@ -65,8 +67,13 @@ export default function PdfReader() {
     } finally {
       setDownloadProgress(null);
       downloadAbortRef.current = null;
+      downloadInProgressRef.current = false;
     }
-  }, [reader.file, reader.preferences.theme, reader.numPages, downloadProgress]);
+  }, [reader.file, reader.preferences.theme, reader.numPages]);
+
+  useEffect(() => {
+    return () => { downloadAbortRef.current?.abort(); };
+  }, []);
 
   useEffect(() => {
     const syncFullscreenState = () => setIsFullscreen(Boolean(document.fullscreenElement));

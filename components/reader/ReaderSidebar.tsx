@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useEffect, useState } from "react";
+import { type SubmitEvent, useState } from "react";
 import type { PdfSearchResult } from "@/hooks/usePdfSearch";
 import { formatFileSize } from "@/lib/reader";
 import type { ReaderMarker } from "@/types/reader";
@@ -40,7 +40,6 @@ export function ReaderSidebar({
   searchQuery,
   searchResults,
   searchCurrentIndex,
-  searchCurrentPage,
   searchIsRunning,
   searchScannedPages,
   searchTotalPages,
@@ -55,19 +54,22 @@ export function ReaderSidebar({
   onClearMarker,
   searchInputRef,
 }: ReaderSidebarProps) {
-  const [searchInput, setSearchInput] = useState(searchQuery);
+  const [searchDraft, setSearchDraft] = useState(() => ({
+    sourceQuery: searchQuery,
+    value: searchQuery,
+  }));
+  const searchInput = searchDraft.sourceQuery === searchQuery ? searchDraft.value : searchQuery;
 
-  useEffect(() => {
-    setSearchInput(searchQuery);
-  }, [searchQuery]);
-
-  const submitPage = (event: FormEvent<HTMLFormElement>) => {
+  const submitPage = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     const value = new FormData(event.currentTarget).get("page");
-    onNavigate(Number(value));
+    const page = Number(value);
+    if (!Number.isNaN(page) && page >= 1 && page <= numPages) {
+      onNavigate(page);
+    }
   };
 
-  const handleSearchSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSearchSubmit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     const cleanInput = searchInput.trim();
     if (!cleanInput) return;
@@ -129,7 +131,7 @@ export function ReaderSidebar({
               id="sidebar-search-input"
               type="search"
               value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
+              onChange={(event) => setSearchDraft({ sourceQuery: searchQuery, value: event.target.value })}
               onKeyDown={handleSearchKeyDown}
               placeholder="Find in document..."
               autoComplete="off"
@@ -143,7 +145,7 @@ export function ReaderSidebar({
               type="button"
               className="sidebar-search-btn"
               onClick={() => {
-                setSearchInput("");
+                setSearchDraft({ sourceQuery: searchQuery, value: "" });
                 onClearSearch();
               }}
               disabled={!searchQuery && !searchInput}
@@ -231,4 +233,3 @@ export function ReaderSidebar({
     </aside>
   );
 }
-

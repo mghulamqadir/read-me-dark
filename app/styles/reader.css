@@ -61,24 +61,6 @@ button:disabled {
   transition: background 200ms ease, color 200ms ease;
 }
 
-.reader-app[data-theme="dark"] {
-  --bg: #0c0e0e;
-  --panel: #141818;
-  --panel2: #1c2020;
-  --glass: rgba(14, 18, 18, 0.85);
-  --text: #e4ede9;
-  --muted: #8a9590;
-  --faint: #4a5550;
-  --line: #252c2a;
-  --accent: #2d9f7d;
-  --accent-lt: #48bfa1;
-  --accent-contrast: #ffffff;
-  --accent-glow: rgba(45, 159, 125, 0.20);
-  --viewer-bg: #090b0b;
-  --shadow: rgba(0, 0, 0, 0.40);
-  --shadow-lg: rgba(0, 0, 0, 0.65);
-  color-scheme: dark;
-}
 
 .reader-app[data-theme="midnight"] {
   --bg: #090d16;
@@ -335,17 +317,7 @@ select:focus-visible {
   padding: 80px 0 60px;
 }
 
-.landing-glow {
-  position: absolute;
-  top: -80px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 560px;
-  height: 380px;
-  background: radial-gradient(ellipse at center, var(--accent-glow) 0%, transparent 70%);
-  pointer-events: none;
-  z-index: 0;
-}
+
 
 .landing-copy {
   position: relative;
@@ -473,15 +445,6 @@ select:focus-visible {
   font-size: 12px;
 }
 
-/* Feature row */
-.feature-row {
-  max-width: 640px;
-  margin: 30px auto 0;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  border-top: 1px solid var(--line);
-}
-
 .recent-documents {
   position: relative;
   z-index: 1;
@@ -515,26 +478,6 @@ select:focus-visible {
 .recent-item:hover { border-color: var(--accent); }
 .recent-item strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .recent-item span { color: var(--muted); font-size: 12px; white-space: nowrap; }
-
-.feature-row div {
-  display: grid;
-  gap: 4px;
-  padding: 20px 10px;
-  text-align: center;
-}
-
-.feature-row strong {
-  font-family: "Playfair Display", Georgia, serif;
-  font-size: 18px;
-  font-weight: 500;
-}
-
-.feature-row span {
-  color: var(--muted);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-}
 
 .error-banner {
   max-width: 640px;
@@ -888,65 +831,6 @@ kbd {
 .zoom-popover input { width: 100%; accent-color: var(--accent); }
 .zoom-popover .zoom-reset { grid-column: 1 / -1; }
 
-.search-popover {
-  display: grid;
-  gap: 8px;
-  min-width: 300px;
-}
-
-.search-form {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 6px;
-}
-
-.search-form input {
-  min-width: 0;
-  height: 32px;
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  padding: 0 9px;
-  background: var(--panel2);
-  color: var(--text);
-  font: inherit;
-  font-size: 12px;
-}
-
-.search-form button,
-.search-actions button {
-  min-width: 32px;
-  height: 32px;
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  padding: 0 9px;
-  background: var(--panel2);
-  color: var(--text);
-  font: inherit;
-  font-size: 11px;
-}
-
-.search-form button:hover:not(:disabled),
-.search-actions button:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.search-status {
-  min-height: 16px;
-  margin: 0;
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 16px;
-}
-
-.search-status.error { color: #d86464; }
-
-.search-actions {
-  display: flex;
-  gap: 6px;
-}
-
-.search-actions .search-clear { margin-left: auto; }
 
 .sidebar-search {
   display: flex;
@@ -1279,7 +1163,9 @@ kbd {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  scroll-behavior: smooth;
+  /* scroll-behavior is intentionally omitted — programmatic scrollTop changes
+     (virtualizer, scroll restoration) must not be browser-animated. Smooth
+     scrolling is applied selectively via scrollTo({ behavior: "smooth" }). */
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
 }
@@ -1386,12 +1272,7 @@ kbd {
 
 /* (page-loading removed — no per-page spinner) */
 
-/* Spinner */
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
+
 
 .spinner {
   width: 26px;
@@ -1482,18 +1363,9 @@ kbd {
     padding: 26px 18px;
   }
 
-  .feature-row {
-    grid-template-columns: 1fr;
-  }
 
   .recent-heading { display: grid; gap: 4px; }
   .recent-item { display: grid; gap: 4px; }
-  .fit-width-btn { display: none; }
-
-  .feature-row div {
-    padding: 12px;
-    border-bottom: 1px solid var(--line);
-  }
 
   .reader-toolbar {
     padding: 0 10px;

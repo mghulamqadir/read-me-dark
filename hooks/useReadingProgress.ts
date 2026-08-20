@@ -8,8 +8,8 @@ export function useReadingProgress() {
   const [recentDocuments, setRecentDocuments] = useState<ReaderProgress[]>(readProgress);
 
   const saveProgress = useCallback((progress: ReaderProgress) => {
-    writeProgress(progress);
-    setRecentDocuments(readProgress());
+    const next = writeProgress(progress);
+    setRecentDocuments(next);
   }, []);
 
   useEffect(() => {

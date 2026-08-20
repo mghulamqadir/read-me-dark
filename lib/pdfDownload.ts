@@ -146,7 +146,7 @@ export async function downloadThemedPdf(
 
   // ── 4. Serialise ─────────────────────────────────────────────────────────
   const pdfBytes = await outDoc.save();
-  const blob = new Blob([pdfBytes.buffer as ArrayBuffer], { type: "application/pdf" });
+  const blob = new Blob([pdfBytes.buffer.slice(pdfBytes.byteOffset, pdfBytes.byteOffset + pdfBytes.byteLength) as ArrayBuffer], { type: "application/pdf" });
   const url = URL.createObjectURL(blob);
 
   // ── 5. Trigger download ──────────────────────────────────────────────────
@@ -159,7 +159,10 @@ export async function downloadThemedPdf(
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = `${baseName} (${themeName}).pdf`;
+  anchor.style.display = "none";
+  document.body.appendChild(anchor);
   anchor.click();
+  document.body.removeChild(anchor);
 
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  setTimeout(() => URL.revokeObjectURL(url), 5_000);
 }

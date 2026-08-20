@@ -49,8 +49,10 @@ export function usePdfSearch(pdf: PDFDocumentProxy | null, sessionId: number) {
           textCache.current.set(pageNumber, pageText);
         }
 
-        const matchIndex = pageText.toLocaleLowerCase().indexOf(normalizedQuery);
-        if (matchIndex >= 0) {
+        const normalizedPageText = pageText.toLocaleLowerCase();
+        let searchStart = 0;
+        let matchIndex = normalizedPageText.indexOf(normalizedQuery, searchStart);
+        while (matchIndex >= 0) {
           const start = Math.max(0, matchIndex - 42);
           const end = Math.min(pageText.length, matchIndex + nextQuery.length + 58);
           const offsetRatio = Math.max(0, Math.min(1, matchIndex / Math.max(1, pageText.length)));
@@ -60,6 +62,8 @@ export function usePdfSearch(pdf: PDFDocumentProxy | null, sessionId: number) {
             matchIndex,
             offsetRatio,
           });
+          searchStart = matchIndex + normalizedQuery.length;
+          matchIndex = normalizedPageText.indexOf(normalizedQuery, searchStart);
         }
 
         if (pageNumber % 8 === 0 || pageNumber === pdf.numPages) {
